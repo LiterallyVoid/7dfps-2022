@@ -21,6 +21,7 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
     } else {
         shader = try am.load(Shader, "shaders/main");
     }
+
     errdefer am.drop(shader);
 
     const texture = try am.load(Texture, path);

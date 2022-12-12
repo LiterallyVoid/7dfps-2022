@@ -10,6 +10,7 @@ const Mesh = @import("./Mesh.zig");
 const Map = @import("./Map.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const RenderContext = @import("./RenderContext.zig");
+const Game = @import("./Game.zig");
 
 comptime {
     _ = PhysicsMesh;
@@ -29,6 +30,8 @@ pub fn main() !void {
     const window = c.glfwCreateWindow(640, 480, "7dfps 2022", null, null) orelse return error.GLFWWindowFailed;
     defer c.glfwDestroyWindow(window);
 
+    c.glfwSetWindowPos(window, 0, 1080 - 480);
+
     c.glfwMakeContextCurrent(window);
     if (c.gladLoadGL(c.glfwGetProcAddress) == 0) return error.OpenGLLoadFailed;
 
@@ -36,39 +39,12 @@ pub fn main() !void {
         .prefix = "data",
     };
 
+    var game: Game = undefined;
+    try game.init(&am, "maps/sandbox.map");
+    defer game.deinit(&am);
+
     const map = try am.load(Map, "maps/sandbox.map");
     defer am.drop(map);
-
-    const mesh = Mesh.init(.{ .static = true, .indexed = true }, ImVertex);
-    defer mesh.deinit();
-
-    mesh.upload(ImVertex, &.{
-        .{
-            .position = .{ -0.5, -0.5 },
-            .uv = .{ 0.0, 0.0 },
-        },
-        .{
-            .position = .{ 0.5, -0.5 },
-            .uv = .{ 1.0, 0.0 },
-        },
-        .{
-            .position = .{ 0.5, 0.5 },
-            .uv = .{ 1.0, 1.0 },
-        },
-        .{
-            .position = .{ -0.5, 0.5 },
-            .uv = .{ -1.0, 1.0 },
-        },
-    });
-
-    mesh.uploadIndices(&.{
-        0,
-        1,
-        2,
-        2,
-        3,
-        0,
-    });
 
     c.glEnable(c.GL_DEPTH_TEST);
 
@@ -77,14 +53,11 @@ pub fn main() !void {
 
     var mouse: [2]f64 = undefined;
 
+    var locked: bool = false;
+
     if (c.glfwRawMouseMotionSupported() != 0) {
         c.glfwSetInputMode(window, c.GLFW_RAW_MOUSE_MOTION, c.GLFW_TRUE);
     }
-
-    c.glfwSetInputMode(window, c.GLFW_CURSOR, c.GLFW_CURSOR_DISABLED);
-
-    var position = linalg.Vec3.new(0.0, 0.0, 1.0);
-    var velocity = linalg.Vec3.new(0.0, 0.0, 0.0);
 
     var time: f64 = c.glfwGetTime();
 
@@ -96,6 +69,16 @@ pub fn main() !void {
 
         c.glClearColor(0.2, 0.3, 0.6, 1.0);
         c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
+
+        if (c.glfwGetMouseButton(window, c.GLFW_MOUSE_BUTTON_LEFT) == c.GLFW_PRESS) {
+            c.glfwSetInputMode(window, c.GLFW_CURSOR, c.GLFW_CURSOR_DISABLED);
+            locked = true;
+        }
+
+        if (c.glfwGetKey(window, c.GLFW_KEY_ESCAPE) == c.GLFW_PRESS) {
+            c.glfwSetInputMode(window, c.GLFW_CURSOR, c.GLFW_CURSOR_NORMAL);
+            locked = false;
+        }
 
         var delta = blk: {
             const new_time = c.glfwGetTime();
@@ -111,82 +94,45 @@ pub fn main() !void {
             var new_mouse: [2]f64 = undefined;
             c.glfwGetCursorPos(window, &new_mouse[0], &new_mouse[1]);
 
-            yaw -= @floatCast(f32, new_mouse[0] - mouse[0]) * 0.022 * 0.1;
-            pitch -= @floatCast(f32, new_mouse[1] - mouse[1]) * 0.022 * 0.1;
+            if (locked) {
+                yaw -= @floatCast(f32, new_mouse[0] - mouse[0]) * 0.022 * 0.1;
+                pitch -= @floatCast(f32, new_mouse[1] - mouse[1]) * 0.022 * 0.1;
+            }
 
             mouse = new_mouse;
         }
 
-        var aspect = @intToFloat(f32, size[0]) / @intToFloat(f32, size[1]);
-
-        const half_extents = linalg.Vec3.new(0.5, 0.5, 0.5);
-
-        const margin = 0.0001;
-        if (map.phys_mesh.nudge(position, half_extents.add(linalg.Vec3.new(margin, margin, margin)))) |impact| {
-            position = position.add(impact.offset);
-            velocity = velocity.sub(impact.plane.xyz().mulScalar(velocity.dot(impact.plane.xyz())));
-        }
-
-        {
-            var i: usize = 0;
-            var remaining: f32 = 1.0;
-
-            while (i < 4) : (i += 1) {
-                var offset = velocity.mulScalar(delta * remaining);
-
-                var impact = map.phys_mesh.traceLine(position, half_extents, offset) orelse {
-                    position = position.add(offset);
-                    break;
-                };
-
-                position = position.add(offset.mulScalar(impact.time));
-
-                velocity = velocity.sub(impact.plane.xyz().mulScalar(velocity.dot(impact.plane.xyz())));
-                remaining *= 1.0 - impact.time;
-            }
-        }
-        velocity = velocity.mulScalar(std.math.pow(f32, 0.5, delta * 10.0));
-
-        var camera =
-            linalg.Mat4.translation(position.data[0], position.data[1], position.data[2])
-            .multiply(linalg.Mat4.rotation(linalg.Vec3.new(0.0, 0.0, 1.0), yaw))
-            .multiply(linalg.Mat4.rotation(linalg.Vec3.new(0.0, 1.0, 0.0), pitch))
-            .multiply(linalg.Mat4.rotation(linalg.Vec3.new(0.0, 0.0, 1.0), std.math.pi * 0.5));
-
-        var forward = camera.toMat3().multiplyVectorOpp(linalg.Vec3.new(0.0, 0.0, -1.0));
-        var right = camera.toMat3().multiplyVectorOpp(linalg.Vec3.new(1.0, 0.0, 0.0));
-
-        const speed = 40.0;
+        var input = Game.Input {};
+        input.angle = .{ pitch, yaw };
 
         if (c.glfwGetKey(window, c.GLFW_KEY_E) == c.GLFW_PRESS) {
-            velocity = velocity.add(forward.mulScalar(delta * speed));
+            input.movement[1] += 1.0;
         }
 
         if (c.glfwGetKey(window, c.GLFW_KEY_D) == c.GLFW_PRESS) {
-            velocity = velocity.add(forward.mulScalar(delta * -speed));
+            input.movement[1] -= 1.0;
         }
 
         if (c.glfwGetKey(window, c.GLFW_KEY_S) == c.GLFW_PRESS) {
-            velocity = velocity.add(right.mulScalar(delta * -speed));
+            input.movement[0] -= 1.0;
         }
 
         if (c.glfwGetKey(window, c.GLFW_KEY_F) == c.GLFW_PRESS) {
-            velocity = velocity.add(right.mulScalar(delta * speed));
+            input.movement[0] += 1.0;
         }
 
-        var ctx = RenderContext {
-            .matrix_projection = linalg.Mat4.perspective(1.5, aspect, 0.1, 100.0),
-            .matrix_camera_to_world = camera,
-            .matrix_world_to_camera = camera.inverse(),
-        };
+        input.keys[0] = c.glfwGetKey(window, c.GLFW_KEY_SPACE) == c.GLFW_PRESS;
 
-        map.draw(&ctx);
+        var aspect = @intToFloat(f32, size[0]) / @intToFloat(f32, size[1]);
 
-        c.glEnable(c.GL_CULL_FACE);
-        c.glEnable(c.GL_BLEND);
-        c.glBlendFunc(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
-        map.drawTransparent(&ctx);
-        c.glDisable(c.GL_BLEND);
+        var ctx: RenderContext = undefined;
+        ctx.aspect = aspect;
+
+        game.input(input);
+
+        game.update(delta);
+
+        game.draw(&ctx);
 
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();

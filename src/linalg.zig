@@ -103,6 +103,14 @@ pub fn Vector(comptime dim: comptime_int, comptime Element_: type, comptime mixi
             return self;
         }
 
+        pub fn broadcast(value: Element) Self {
+            var self: Self = undefined;
+            inline for (self.data) |*el| {
+                el.* = value;
+            }
+            return self;
+        }
+
         pub fn add(self: Self, other: Self) Self {
             var result: Self = undefined;
             inline for (self.data) |_, i| {

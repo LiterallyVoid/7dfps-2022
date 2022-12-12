@@ -55,7 +55,7 @@ fn brushNudge(planes: [][4]f32, point: linalg.Vec3, half_extents: linalg.Vec3) ?
 
         var height = plane.dotPoint(point) - plane.xyz().abs().dot(half_extents);
 
-        if (height >= -0.000001) return null;
+        if (height >= -0.0001) return null;
 
         if (height > closest) {
             closest = height;
