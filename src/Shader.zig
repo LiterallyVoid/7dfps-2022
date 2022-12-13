@@ -3,6 +3,7 @@ const std = @import("std");
 const asset = @import("./asset.zig");
 const util = @import("./util.zig");
 const linalg = @import("./linalg.zig");
+const RenderContext = @import("./RenderContext.zig");
 
 const Self = @This();
 
@@ -207,8 +208,11 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
     c.glDeleteProgram(self.gl_program);
 }
 
-pub fn bind(self: Self) void {
+pub fn bind(self: Self, ctx: *RenderContext) void {
     c.glUseProgram(self.gl_program);
+
+    self.uniformMatrix("u_world_to_camera", ctx.matrix_world_to_camera);
+    self.uniformMatrix("u_projection", ctx.matrix_projection);
 }
 
 pub fn uniformMatrix(self: Self, comptime name: [:0]const u8, matrix: linalg.Mat4) void {
@@ -216,4 +220,11 @@ pub fn uniformMatrix(self: Self, comptime name: [:0]const u8, matrix: linalg.Mat
     if (location < 0) return;
 
     c.glUniformMatrix4fv(location, 1, c.GL_FALSE, &matrix.data[0][0]);
+}
+
+pub fn uniformMatrices(self: Self, comptime name: [:0]const u8, matrices: []const linalg.Mat4) void {
+    const location = c.glGetUniformLocation(self.gl_program, name.ptr);
+    if (location < 0) return;
+
+    c.glUniformMatrix4fv(location, @intCast(c_int, matrices.len), c.GL_FALSE, &matrices[0].data[0][0]);
 }

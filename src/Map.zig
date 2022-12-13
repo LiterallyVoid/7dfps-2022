@@ -65,7 +65,7 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
         range.vertex_first = try reader.readIntLittle(u32);
         range.vertex_count = try reader.readIntLittle(u32);
 
-        range.material = try am.load(Material, name);
+        range.material = try am.load(Material, .{ .path = name });
     }
 
     errdefer {

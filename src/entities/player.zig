@@ -1,58 +1,18 @@
 const std = @import("std");
 
 const linalg = @import("../linalg.zig");
+const c = @import("../c.zig");
 const Game = @import("../Game.zig");
 const RenderContext = @import("../RenderContext.zig");
 const Entity = @import("../Entity.zig");
+const Model = @import("../Model.zig");
 
-const MARGIN = 0.0001;
 const STEPHEIGHT = 0.2;
 
-fn move(self: *Entity, ctx: *const Entity.TickContext) void {
-    self.on_ground = false;
-
-    if (ctx.game.map.phys_mesh.nudge(self.origin, self.half_extents.add(linalg.Vec3.broadcast(MARGIN)))) |impact| {
-        self.origin = self.origin.add(impact.offset);
-
-        const into = self.velocity.dot(impact.plane.xyz());
-
-        if (into < 0.0) {
-            self.velocity = self.velocity.sub(impact.plane.xyz().mulScalar(into));
-        }
-    }
-
-    {
-        var i: usize = 0;
-        var remaining: f32 = 1.0;
-
-        while (i < 4) : (i += 1) {
-            var offset = self.velocity.mulScalar(ctx.delta * remaining);
-
-            var impact = ctx.game.map.phys_mesh.traceLine(self.origin, self.half_extents, offset) orelse {
-                self.origin = self.origin.add(offset);
-                break;
-            };
-
-            if (impact.plane.data[2] > 0.7) self.on_ground = true;
-
-            self.origin = self.origin.add(offset.mulScalar(impact.time));
-
-            self.velocity = self.velocity.sub(impact.plane.xyz().mulScalar(self.velocity.dot(impact.plane.xyz())));
-            remaining *= 1.0 - impact.time;
-        }
-    }
-}
-
-fn traceVertical(self: *Entity, ctx: *const Entity.TickContext, offset: f32) ?f32 {
-    if (ctx.game.map.phys_mesh.traceLine(self.origin, self.half_extents.sub(linalg.Vec3.broadcast(MARGIN)), linalg.Vec3.new(0.0, 0.0, offset))) |impact| {
-        return impact.time * offset + MARGIN * 2.0 * if (offset < 0.0) @as(f32, -1.0) else 1.0;
-    }
-
-    return null;
-}
+const TIMER_ATTACK_TIME = 0;
 
 fn moveAir(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Vec3) void {
-    move(self, ctx);
+    self.move(ctx);
 
     self.velocity = self.velocity.mulScalar(std.math.pow(f32, 0.5, ctx.delta * 0.5));
     self.velocity = self.velocity.add(movement.mulScalar(ctx.delta * 2.0));
@@ -65,22 +25,14 @@ fn moveAir(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Vec3)
 }
 
 fn moveGround(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Vec3) void {
-    const up_movement = traceVertical(self, ctx, STEPHEIGHT) orelse STEPHEIGHT;
-
-    self.origin.data[2] += up_movement;
-
-    move(self, ctx);
-
     self.velocity = self.velocity.mulScalar(std.math.pow(f32, 0.5, ctx.delta * 20.0));
     self.velocity = self.velocity.add(movement.mulScalar(ctx.delta * 120.0));
 
     self.velocity.data[2] = 0.0;
 
-    if (traceVertical(self, ctx, -STEPHEIGHT - up_movement)) |down_movement| {
-        self.origin.data[2] += down_movement;
-    } else {
-        self.origin.data[2] -= up_movement;
+    self.walkMove(ctx, STEPHEIGHT);
 
+    if (!self.on_ground) {
         self.state = .air;
     }
 
@@ -88,6 +40,21 @@ fn moveGround(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Ve
         self.velocity.data[2] = 10.0;
 
         self.state = .air;
+    }
+}
+
+fn tickWeapon(self: *Entity, ctx: *const Entity.TickContext) void {
+    self.timers[TIMER_ATTACK_TIME] += ctx.delta * 60.0;
+    if (self.timers[TIMER_ATTACK_TIME] > 75.0 and self.timers[TIMER_ATTACK_TIME] < 100.0) {
+        self.timers[TIMER_ATTACK_TIME] = 100.0;
+    }
+
+    if (self.timers[TIMER_ATTACK_TIME] > 168.0) {
+        self.timers[TIMER_ATTACK_TIME] = 168.0;
+
+        if (self.aux.player.last_input.key(.attack)) {
+            self.timers[TIMER_ATTACK_TIME] = 40.0;
+        }
     }
 }
 
@@ -115,6 +82,8 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         .air => moveAir(self, ctx, movement),
         else => unreachable,
     }
+
+    tickWeapon(self, ctx);
 }
 
 fn inputFn(self: *Entity, game: *Game, input: Game.Input) void {
@@ -140,14 +109,69 @@ fn cameraFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
     ctx.matrix_world_to_camera = camera.inverse();
 }
 
-pub fn spawn(self: *Entity, game: *Game) void {
+fn drawFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
     _ = game;
 
+    var frames = .{
+        .{
+            .frame = self.timers[TIMER_ATTACK_TIME],
+            .weight = 1.0,
+        },
+    };
+
+    var child_ctx = ctx.*;
+
+    child_ctx.matrix_projection = linalg.Mat4.perspective(1.1, ctx.aspect, 0.01, 10.0);
+
+    const camera =
+        linalg.Mat4.translation(0.076, -0.1, -0.14)
+        .multiply(linalg.Mat4.rotation(linalg.Vec3.new(1.0, 0.0, 0.0), std.math.pi * -0.5));
+
+    child_ctx.matrix_camera_to_world = camera.inverse();
+    child_ctx.matrix_world_to_camera = camera;
+
+    c.glDepthRange(0.0, 0.1);
+    self.models[1].?.drawFiltered(&child_ctx, linalg.Mat4.identity(), &frames, "grid");
+    c.glDepthRange(0.0, 1.0);
+}
+
+fn drawTransparentFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
+    _ = game;
+
+    var frames = .{
+        .{
+            .frame = self.timers[TIMER_ATTACK_TIME],
+            .weight = 1.0,
+        },
+    };
+
+    var child_ctx = ctx.*;
+
+    child_ctx.matrix_projection = linalg.Mat4.perspective(1.1, ctx.aspect, 0.01, 10.0);
+
+    const camera =
+        linalg.Mat4.translation(0.076, -0.1, -0.14)
+        .multiply(linalg.Mat4.rotation(linalg.Vec3.new(1.0, 0.0, 0.0), std.math.pi * -0.5));
+
+    child_ctx.matrix_camera_to_world = camera.inverse();
+    child_ctx.matrix_world_to_camera = camera;
+
+    c.glDepthRange(0.0, 0.1);
+    self.models[1].?.drawFiltered(&child_ctx, linalg.Mat4.identity(), &frames, "shaders");
+    c.glDepthRange(0.0, 1.0);
+}
+
+pub fn spawn(self: *Entity, game: *Game) void {
+    self.origin = linalg.Vec3.new(-2.0, 0.0, 1.2);
     self.half_extents = linalg.Vec3.new(0.6, 0.6, 1.2);
+
+    self.models[1] = game.asset_manager.load(Model, "weapons/shotgun/shotgun.model") catch null;
 
     self.tick = tickFn;
     self.input = inputFn;
     self.camera = cameraFn;
+    self.draw = drawFn;
+    self.drawTransparent = drawTransparentFn;
 
     self.aux = .{
         .player = .{},

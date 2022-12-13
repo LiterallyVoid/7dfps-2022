@@ -41,7 +41,7 @@ pub fn main() !void {
 
     var game: Game = undefined;
     try game.init(&am, "maps/sandbox.map");
-    defer game.deinit(&am);
+    defer game.deinit();
 
     const map = try am.load(Map, "maps/sandbox.map");
     defer am.drop(map);
@@ -95,14 +95,14 @@ pub fn main() !void {
             c.glfwGetCursorPos(window, &new_mouse[0], &new_mouse[1]);
 
             if (locked) {
-                yaw -= @floatCast(f32, new_mouse[0] - mouse[0]) * 0.022 * 0.1;
-                pitch -= @floatCast(f32, new_mouse[1] - mouse[1]) * 0.022 * 0.1;
+                yaw -= @floatCast(f32, new_mouse[0] - mouse[0]) * 0.022 * 0.006;
+                pitch -= @floatCast(f32, new_mouse[1] - mouse[1]) * 0.022 * 0.006;
             }
 
             mouse = new_mouse;
         }
 
-        var input = Game.Input {};
+        var input = Game.Input{};
         input.angle = .{ pitch, yaw };
 
         if (c.glfwGetKey(window, c.GLFW_KEY_E) == c.GLFW_PRESS) {
@@ -122,6 +122,7 @@ pub fn main() !void {
         }
 
         input.keys[0] = c.glfwGetKey(window, c.GLFW_KEY_SPACE) == c.GLFW_PRESS;
+        input.keys[1] = c.glfwGetMouseButton(window, c.GLFW_MOUSE_BUTTON_LEFT) == c.GLFW_PRESS;
 
         var aspect = @intToFloat(f32, size[0]) / @intToFloat(f32, size[1]);
 

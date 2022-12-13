@@ -6,6 +6,8 @@ const Self = @This();
 
 pub const IndexType = u32;
 
+pub const Attr_U8i = opaque {};
+
 pub const Config = struct {
     static: bool,
     indexed: bool,
@@ -34,15 +36,20 @@ pub fn init(config: Config, comptime Vertex: type) Self {
 
     c.glBindBuffer(c.GL_ARRAY_BUFFER, self.gl_vbo);
 
+    const Override = if (@hasDecl(Vertex, "Override")) Vertex.Override else struct {};
+
     inline for (@typeInfo(Vertex).Struct.fields) |field, i| {
         c.glEnableVertexAttribArray(i);
 
-        const Inner = @typeInfo(field.field_type).Array.child;
+        const FieldTy = if (@hasDecl(Override, field.name)) @field(Override, field.name) else field.field_type;
 
-        const vec_len = @typeInfo(field.field_type).Array.len;
+        const Inner = @typeInfo(FieldTy).Array.child;
+        const vec_len = @typeInfo(FieldTy).Array.len;
+
         const vec_ty = switch (Inner) {
             i8 => c.GL_BYTE,
-            u8 => c.GL_UNSIGNED_BYTE,
+            u8, Attr_U8i => c.GL_UNSIGNED_BYTE,
+
 
             i32 => c.GL_INT,
             u32 => c.GL_UNSIGNED_INT,
@@ -59,7 +66,16 @@ pub fn init(config: Config, comptime Vertex: type) Self {
             else => c.GL_TRUE,
         };
 
-        c.glVertexAttribPointer(i, vec_len, vec_ty, normalize, @sizeOf(Vertex), @intToPtr(?*anyopaque, @offsetOf(Vertex, field.name)));
+        const is_int_attrib = switch (Inner) {
+            Attr_U8i => true,
+            else => false,
+        };
+
+        if (is_int_attrib) {
+            c.glVertexAttribIPointer(i, vec_len, vec_ty, @sizeOf(Vertex), @intToPtr(?*anyopaque, @offsetOf(Vertex, field.name)));
+        } else {
+            c.glVertexAttribPointer(i, vec_len, vec_ty, normalize, @sizeOf(Vertex), @intToPtr(?*anyopaque, @offsetOf(Vertex, field.name)));
+        }
     }
 
     c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.gl_ibo);

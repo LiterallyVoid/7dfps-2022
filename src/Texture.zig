@@ -20,6 +20,8 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
     var width: c_int = 0;
     var height: c_int = 0;
 
+    c.stbi_set_flip_vertically_on_load(1);
+
     var pixels = c.stbi_load_from_memory(contents.ptr, @intCast(c_int, contents.len), &width, &height, null, 4) orelse return error.ImageLoadFailed;
     defer c.stbi_image_free(pixels);
 

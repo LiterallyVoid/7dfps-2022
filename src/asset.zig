@@ -21,11 +21,11 @@ pub const Manager = struct {
         return file;
     }
 
-    pub fn load(self: *Manager, comptime T: type, path: []const u8) !*T {
+    pub fn load(self: *Manager, comptime T: type, data: anytype) !*T {
         const box = try util.allocator.create(T);
         errdefer util.allocator.destroy(box);
 
-        box.* = try T.init(self, path);
+        box.* = try T.init(self, data);
 
         return box;
     }

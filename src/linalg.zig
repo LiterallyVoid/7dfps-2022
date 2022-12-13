@@ -207,7 +207,6 @@ pub fn Vector(comptime dim: comptime_int, comptime Element_: type, comptime mixi
             return result;
         }
 
-
         pub fn dot(self: Self, other: Self) Element {
             var sum: Element = 0;
             inline for (self.data) |_, i| {
@@ -363,6 +362,30 @@ pub fn Matrix(comptime dim: comptime_int, comptime Element: type, comptime Vec: 
                 }
             }
             return self;
+        }
+
+        pub fn multiplyScalar(self: Self, other: Element) Self {
+            var out: Self = Self.zero();
+            comptime var i = 0;
+            inline while (i < dim) : (i += 1) {
+                comptime var j = 0;
+                inline while (j < dim) : (j += 1) {
+                    out.data[i][j] = self.data[i][j] * other;
+                }
+            }
+            return out;
+        }
+
+        pub fn addElementwise(self: Self, other: Self) Self {
+            var out: Self = Self.zero();
+            comptime var i = 0;
+            inline while (i < dim) : (i += 1) {
+                comptime var j = 0;
+                inline while (j < dim) : (j += 1) {
+                    out.data[i][j] = self.data[i][j] + other.data[i][j];
+                }
+            }
+            return out;
         }
 
         pub fn multiply(a: Self, b: Self) Self {

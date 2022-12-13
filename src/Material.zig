@@ -8,26 +8,43 @@ const RenderContext = @import("./RenderContext.zig");
 
 const Self = @This();
 
+pub const LoadInfo = struct {
+    path: []const u8,
+    options: Options = .{},
+};
+
+pub const Options = struct {
+    skeletal: bool = false,
+};
+
+options: Options,
+
 transparent: bool = false,
 shader: *Shader,
 texture: *Texture,
 
-pub fn init(am: *asset.Manager, path: []const u8) !Self {
-    const transparent = std.mem.indexOf(u8, path, "glass") != null;
-
+pub fn init(am: *asset.Manager, info: LoadInfo) !Self {
     var shader: *Shader = undefined;
-    if (transparent) {
-        shader = try am.load(Shader, "shaders/glass");
+
+    var texture_path = info.path;
+
+    if (std.mem.indexOf(u8, info.path, "!")) |exclaim| {
+        shader = try am.load(Shader, info.path[0..exclaim]);
+        texture_path = info.path[exclaim + 1..];
     } else {
-        shader = try am.load(Shader, "shaders/main");
+        if (info.options.skeletal) {
+            shader = try am.load(Shader, "shaders/skeletal");
+        } else {
+            shader = try am.load(Shader, "shaders/main");
+        }
     }
 
     errdefer am.drop(shader);
 
-    const texture = try am.load(Texture, path);
+    const texture = try am.load(Texture, texture_path);
 
     return Self{
-        .transparent = transparent,
+        .options = info.options,
         .shader = shader,
         .texture = texture,
     };
@@ -39,9 +56,6 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
 }
 
 pub fn bind(self: Self, ctx: *RenderContext) void {
-    self.shader.bind();
+    self.shader.bind(ctx);
     self.texture.bind();
-
-    self.shader.uniformMatrix("u_world_to_camera", ctx.matrix_world_to_camera);
-    self.shader.uniformMatrix("u_projection", ctx.matrix_projection);
 }

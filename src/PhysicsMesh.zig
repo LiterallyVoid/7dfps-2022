@@ -2,8 +2,18 @@ const std = @import("std");
 
 const linalg = @import("./linalg.zig");
 const util = @import("./util.zig");
+const Entity = @import("./Entity.zig");
 
 const Self = @This();
+
+pub const Ignore = struct {
+    entity: ?*Entity = null,
+    map: bool = false,
+
+    pub fn doesIgnoreEntity(self: Ignore, other: *Entity) bool {
+        return self.entity == other;
+    }
+};
 
 pub const Impact = struct {
     time: f32,
@@ -11,9 +21,21 @@ pub const Impact = struct {
 
     offset: linalg.Vec3 = linalg.Vec3.zero(),
 
+    entity: ?*Entity = null,
+
     pub fn join(self: Impact, other: ?Impact) Impact {
         if ((other orelse return self).time < self.time) return other.?;
         return self;
+    }
+
+    pub fn joinNudge(self: Impact, other_: ?Impact) Impact {
+        const other = other_ orelse return self;
+        return .{
+            .entity = self.entity orelse other.entity,
+            .time = 0.0,
+            .offset = other.offset.add(self.offset),
+            .plane = self.plane,
+        };
     }
 };
 
@@ -51,11 +73,11 @@ fn brushNudge(planes: [][4]f32, point: linalg.Vec3, half_extents: linalg.Vec3) ?
     var closest_plane = linalg.Vec4.zero();
 
     for (planes) |plane_raw| {
-        const plane = linalg.Vec4 { .data = plane_raw };
+        const plane = linalg.Vec4{ .data = plane_raw };
 
         var height = plane.dotPoint(point) - plane.xyz().abs().dot(half_extents);
 
-        if (height >= -0.0001) return null;
+        if (height >= 0.0) return null;
 
         if (height > closest) {
             closest = height;
@@ -79,7 +101,7 @@ fn brushTraceLine(planes: [][4]f32, point: linalg.Vec3, half_extents: linalg.Vec
     var enter_plane: linalg.Vec4 = undefined;
 
     for (planes) |plane_raw| {
-        const plane = linalg.Vec4 { .data = plane_raw };
+        const plane = linalg.Vec4{ .data = plane_raw };
 
         var height = plane.dotPoint(point) - plane.xyz().abs().dot(half_extents);
         var speed = plane.xyz().dot(direction);
@@ -153,7 +175,7 @@ fn packBrushes(brushes: []const Brush) !Block {
         };
 
         for (brush.planes) |plane| {
-            std.mem.copy(u8, data.ptr[current_byte..current_byte + @sizeOf([4]f32)], std.mem.asBytes(&plane));
+            std.mem.copy(u8, data.ptr[current_byte .. current_byte + @sizeOf([4]f32)], std.mem.asBytes(&plane));
             current_byte += @sizeOf([4]f32);
         }
 
@@ -179,7 +201,7 @@ const BlockIterator = struct {
     done: bool = false,
 
     pub fn new(blocks_size: [3]usize, start: [3]usize, size: [3]usize) BlockIterator {
-        var self = BlockIterator {
+        var self = BlockIterator{
             .blocks_size = blocks_size,
 
             .index = undefined,
@@ -315,7 +337,7 @@ pub fn init(triangles: [][3][3]f32) !Self {
         var edges: [3]linalg.Vec3 = undefined;
 
         for (triangle) |vertex, i| {
-            points[i] = linalg.Vec3 { .data = vertex };
+            points[i] = linalg.Vec3{ .data = vertex };
         }
 
         for (points) |point, i| {
@@ -378,7 +400,7 @@ pub fn init(triangles: [][3][3]f32) !Self {
 
     var self: Self = undefined;
 
-    self.origin = linalg.Vec3 { .data = mins };
+    self.origin = linalg.Vec3{ .data = mins };
 
     for (mins) |min_axis, i| {
         const max_axis = maxs[i];
@@ -504,15 +526,7 @@ pub fn nudge(self: Self, point: linalg.Vec3, half_extents: linalg.Vec3) ?Impact 
 
         while (brush) |next| : (brush = next.next_brush) {
             if (brushNudge(next.planes(), new_point, half_extents)) |new_impact| {
-                if (impact) |old_impact| {
-                    impact = .{
-                        .time = 0.0,
-                        .offset = old_impact.offset.add(new_impact.offset),
-                        .plane = new_impact.plane,
-                    };
-                } else {
-                    impact = new_impact;
-                }
+                impact = new_impact.joinNudge(impact);
 
                 new_point = point.add(impact.?.offset);
             }
