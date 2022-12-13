@@ -5,6 +5,7 @@ const Game = @import("./Game.zig");
 const RenderContext = @import("./RenderContext.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const Model = @import("./Model.zig");
+const Sequence = @import("./Sequence.zig");
 
 const Self = @This();
 
@@ -109,6 +110,7 @@ aux: union(enum) {
     player: struct {
         last_input: Game.Input = .{},
         roll: f32 = 0.0,
+        shells_loaded: u32 = 5,
     },
 } = undefined,
 
@@ -129,8 +131,11 @@ velocity: linalg.Vec3 = linalg.Vec3.zero(),
 
 on_ground: bool = false,
 
-models: [16]?*Model = [1]?*Model{ null } ** 16,
+models: [16]?*Model = [1]?*Model{null} ** 16,
 
-flags: [32]bool = [1]bool{ false } ** 32,
+flags: [32]bool = [1]bool{false} ** 32,
 
-timers: [8]f32 = [1]f32{ 0.0 } ** 8,
+timers: [8]f32 = [1]f32{0.0} ** 8,
+sequences: [2]Sequence = .{undefined} ** 2,
+
+debug_position: linalg.Vec3 = linalg.Vec3.zero(),

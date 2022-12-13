@@ -60,8 +60,22 @@ pub fn main() !void {
     }
 
     var time: f64 = c.glfwGetTime();
+    var acc: f64 = 0.0;
+    var frames: u32 = 0;
+
+    var spent: f32 = 0.0;
 
     while (c.glfwWindowShouldClose(window) == 0) {
+        var delta = blk: {
+            const new_time = c.glfwGetTime();
+
+            var delta_ = new_time - time;
+
+            time = new_time;
+
+            break :blk @floatCast(f32, delta_);
+        };
+
         var size: [2]c_int = undefined;
         c.glfwGetFramebufferSize(window, &size[0], &size[1]);
 
@@ -80,16 +94,6 @@ pub fn main() !void {
             locked = false;
         }
 
-        var delta = blk: {
-            const new_time = c.glfwGetTime();
-
-            var delta_ = new_time - time;
-
-            time = new_time;
-
-            break :blk @floatCast(f32, delta_);
-        };
-
         {
             var new_mouse: [2]f64 = undefined;
             c.glfwGetCursorPos(window, &new_mouse[0], &new_mouse[1]);
@@ -98,6 +102,9 @@ pub fn main() !void {
                 yaw -= @floatCast(f32, new_mouse[0] - mouse[0]) * 0.022 * 0.006;
                 pitch -= @floatCast(f32, new_mouse[1] - mouse[1]) * 0.022 * 0.006;
             }
+
+            yaw = @mod(yaw, std.math.pi * 2);
+            pitch = std.math.clamp(pitch, 0.0, std.math.pi);
 
             mouse = new_mouse;
         }
@@ -135,8 +142,22 @@ pub fn main() !void {
 
         game.draw(&ctx);
 
+        spent += @floatCast(f32, c.glfwGetTime() - time);
+
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
+
+        acc += delta;
+        frames += 1;
+
+        if (acc > 1.0) {
+            var buf: [1024]u8 = undefined;
+            var title = std.fmt.bufPrint(&buf, "{d}dfps ({d}ms spent per frame)\x00", .{ @intToFloat(f32, frames) / acc, spent / @intToFloat(f32, frames) * 1000.0 }) catch "";
+            c.glfwSetWindowTitle(window, title.ptr);
+            acc = 0.0;
+            frames = 0;
+            spent = 0.0;
+        }
     }
 
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)

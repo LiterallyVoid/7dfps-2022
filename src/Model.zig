@@ -130,12 +130,12 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
 
         _ = try reader.readNoEof(name);
 
-        for ([_]void{ {} } ** 16) |_, j| {
+        for ([_]void{{}} ** 16) |_, j| {
             var bits = try reader.readIntLittle(u32);
             bone.rest_local.data[j % 4][j / 4] = @bitCast(f32, bits);
         }
 
-        for ([_]void{ {} } ** 16) |_, j| {
+        for ([_]void{{}} ** 16) |_, j| {
             var bits = try reader.readIntLittle(u32);
             bone.rest_inverse.data[j % 4][j / 4] = @bitCast(f32, bits);
         }
@@ -156,7 +156,7 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
         const range = bone_frames[frames_count * i .. frames_count * (i + 1)];
 
         for (range) |*matrix| {
-            for ([_]void{ {} } ** 16) |_, j| {
+            for ([_]void{{}} ** 16) |_, j| {
                 var bits = try reader.readIntLittle(u32);
                 matrix.data[j % 4][j / 4] = @bitCast(f32, bits);
             }

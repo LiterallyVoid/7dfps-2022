@@ -10,6 +10,7 @@ const Entity = @import("./Entity.zig");
 const RenderContext = @import("./RenderContext.zig");
 
 const PhysicsMesh = @import("./PhysicsMesh.zig");
+const Model = @import("./Model.zig");
 
 const ent_player = @import("./entities/player.zig");
 const ent_slasher = @import("./entities/slasher.zig");
@@ -42,6 +43,8 @@ player: *Entity,
 prng: std.rand.DefaultPrng,
 rand: std.rand.Random,
 
+dbg_gizmo: *Model,
+
 pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
     self.* = .{
         .asset_manager = am,
@@ -51,15 +54,14 @@ pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
 
         .prng = std.rand.DefaultPrng.init(1337),
         .rand = undefined,
+
+        .dbg_gizmo = try am.load(Model, "dev/gizmo.model"),
     };
 
     self.rand = self.prng.random();
 
     self.player = self.spawn().?;
     ent_player.spawn(self.player, self);
-
-    const slasher = self.spawn().?;
-    ent_slasher.spawn(slasher, self);
 }
 
 pub fn deinit(self: *Self) void {
@@ -98,9 +100,12 @@ pub fn update(self: *Self, delta: f32) void {
 
     for (self.entities) |*entity| {
         if (!entity.alive) {
-            for (entity.models) |model_opt| {
-                const model = model_opt orelse continue;
+            for (entity.models) |*model_opt| {
+                const model = model_opt.* orelse continue;
+
                 self.asset_manager.drop(model);
+
+                model_opt.* = null;
             }
 
             continue;
@@ -148,6 +153,55 @@ pub fn draw(self: *Self, ctx: *RenderContext) void {
     c.glDepthMask(c.GL_TRUE);
 }
 
+fn boxTraceLine(point: linalg.Vec3, half_extents: linalg.Vec3, direction: linalg.Vec3, ent_origin: linalg.Vec3, ent_half_extents: linalg.Vec3) ?PhysicsMesh.Impact {
+    var enter_time = -std.math.inf(f32);
+    var exit_time = std.math.inf(f32);
+
+    var enter_plane: linalg.Vec4 = undefined;
+
+    comptime var i: usize = 0;
+    inline while (i < 6) : (i += 1) blk: {
+        const axis = i % 3;
+
+        var sign: f32 = if (i < 3) 1.0 else -1.0;
+
+        var plane = linalg.Vec4.zero();
+        plane.data[axis] = sign;
+        plane.data[3] = ent_origin.data[axis] * -sign - ent_half_extents.data[axis];
+
+        var height = (point.data[axis] - ent_origin.data[axis]) * sign - ent_half_extents.data[axis] - half_extents.data[axis];
+        var speed = direction.data[axis] * sign;
+
+        if (speed == 0.0) {
+            if (height < 0) break :blk;
+            return null;
+        }
+
+        var time = height / -speed;
+
+        if (speed > 0.0) {
+            exit_time = std.math.min(exit_time, time);
+            break :blk;
+        }
+
+        if (time > enter_time) {
+            enter_time = time;
+            enter_plane = plane;
+        }
+
+        if (enter_time > exit_time + 0.00001) return null;
+    }
+
+    if (enter_time < 0.0) return null;
+    if (enter_time > 1.0) return null;
+    if (enter_time > exit_time + 0.00001) return null;
+
+    return .{
+        .time = enter_time,
+        .plane = enter_plane,
+    };
+}
+
 fn boxNudge(point: linalg.Vec3, half_extents: linalg.Vec3, ent_origin: linalg.Vec3, ent_half_extents: linalg.Vec3) ?PhysicsMesh.Impact {
     var closest: f32 = std.math.inf(f32);
     var closest_nudge = linalg.Vec3.zero();
@@ -191,13 +245,27 @@ fn boxNudge(point: linalg.Vec3, half_extents: linalg.Vec3, ent_origin: linalg.Ve
 }
 
 pub fn traceLine(self: *Self, point: linalg.Vec3, half_extents: linalg.Vec3, direction: linalg.Vec3, ignore: PhysicsMesh.Ignore) ?PhysicsMesh.Impact {
-    _ = ignore;
-    return self.map.phys_mesh.traceLine(point, half_extents, direction);
+    var impact: ?PhysicsMesh.Impact = null;
+
+    for (self.entities) |*entity| {
+        if (!entity.alive) continue;
+        if (ignore.doesIgnoreEntity(entity)) continue;
+
+        var new_impact = boxTraceLine(point, half_extents, direction, entity.origin, entity.half_extents) orelse continue;
+        new_impact.entity = entity;
+
+        impact = new_impact.join(impact);
+    }
+
+    if (self.map.phys_mesh.traceLine(point, half_extents, direction)) |new_impact| {
+        impact = new_impact.join(impact);
+    }
+
+    return impact;
 }
 
 pub fn nudge(self: *Self, point: linalg.Vec3, half_extents: linalg.Vec3, ignore: PhysicsMesh.Ignore) ?PhysicsMesh.Impact {
     var impact: ?PhysicsMesh.Impact = null;
-
     var new_point = point;
 
     for (self.entities) |*entity| {

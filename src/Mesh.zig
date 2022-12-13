@@ -50,7 +50,6 @@ pub fn init(config: Config, comptime Vertex: type) Self {
             i8 => c.GL_BYTE,
             u8, Attr_U8i => c.GL_UNSIGNED_BYTE,
 
-
             i32 => c.GL_INT,
             u32 => c.GL_UNSIGNED_INT,
 

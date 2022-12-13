@@ -30,7 +30,7 @@ pub fn init(am: *asset.Manager, info: LoadInfo) !Self {
 
     if (std.mem.indexOf(u8, info.path, "!")) |exclaim| {
         shader = try am.load(Shader, info.path[0..exclaim]);
-        texture_path = info.path[exclaim + 1..];
+        texture_path = info.path[exclaim + 1 ..];
     } else {
         if (info.options.skeletal) {
             shader = try am.load(Shader, "shaders/skeletal");
