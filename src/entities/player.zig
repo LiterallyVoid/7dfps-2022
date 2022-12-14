@@ -10,30 +10,73 @@ const Sequence = @import("../Sequence.zig");
 
 const STEPHEIGHT = 0.2;
 
-const TIMER_ATTACK_TIME = 0;
-
 const CAMERA_OFFSET = linalg.Vec3.new(0.0, 0.0, 0.8);
 
-const BALANCE_SHOTGUN_REFIRE = 1.0;
+const ENTFLAG_CANCEL_RELOAD: u32 = 1 << 0;
 
 const SEQFLAG_INTERRUPTIBLE = 1 << 0;
 const SEQFLAG_EXTRA_ROUND = 1 << 1;
+const SEQFLAG_CANCELLABLE = 1 << 2;
+
+const SHOTGUN_FRAMERATE = 60.0;
 
 const shotgun_idle = Sequence.init(&.{
     .{ .set_flags = SEQFLAG_INTERRUPTIBLE },
-    .{ .frame_range = .{ .start = 40.0, .end = 40.0, .framerate = -1.0 } },
+    .{ .frame_range = .{ .start = 40.0, .end = 40.0, .framerate = 0.0 } },
     .restart,
 });
 
 const shotgun_fire = Sequence.init(&.{
     .{ .set_flags = SEQFLAG_EXTRA_ROUND },
-    .{ .frame_range = .{ .start = 40.0, .end = 75.0, .framerate = 60.0 } },
-    .{ .frame_range = .{ .start = 100.0, .end = 169.0, .framerate = 60.0 } },
+    .{ .frame_range = .{ .start = 40.0, .end = 75.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 100.0, .end = 160.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .set_flags = SEQFLAG_INTERRUPTIBLE },
+    .{ .frame_range = .{ .start = 160.0, .end = 169.0, .framerate = SHOTGUN_FRAMERATE } },
     .{ .replace_with = &shotgun_idle },
 });
 
+const shotgun_reload_begin = Sequence.init(&.{
+    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .set_flags = SEQFLAG_EXTRA_ROUND | SEQFLAG_CANCELLABLE },
+    .{ .frame_range = .{ .start = 213.0, .end = 241.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .call_function = .{ .callback = sLoadShell } },
+});
+
+const shotgun_reload_begin_tac = Sequence.init(&.{
+    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .replace_with = &shotgun_reload_shell },
+});
+
+const shotgun_reload_shell = Sequence.init(&.{
+    .{ .set_flags = SEQFLAG_CANCELLABLE },
+    .{ .set_flags = SEQFLAG_EXTRA_ROUND },
+    .{ .frame_range = .{ .start = 242.0, .end = 272.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .call_function = .{ .callback = sLoadShell } },
+});
+
+const shotgun_reload_end = Sequence.init(&.{
+    .{ .frame_range = .{ .start = 273.0, .end = 303.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .set_flags = SEQFLAG_INTERRUPTIBLE },
+    .{ .frame_range = .{ .start = 303.0, .end = 315.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .replace_with = &shotgun_idle },
+});
+
+fn sLoadShell(self: *Entity, ctx: *const Entity.TickContext) void {
+    _ = ctx;
+    self.aux.player.shells_loaded += 1;
+
+    if (self.aux.player.shells_loaded < 5 and (self.flags & ENTFLAG_CANCEL_RELOAD) == 0) {
+        self.sequences[0] = shotgun_reload_shell;
+    } else {
+        self.flags &= ~ENTFLAG_CANCEL_RELOAD;
+        self.sequences[0] = shotgun_reload_end;
+    }
+}
+
 fn shotgunAttack(self: *Entity, ctx: *const Entity.TickContext, forward: linalg.Vec3, right: linalg.Vec3) void {
-    const up = forward.cross(right);
+    self.flags &= ~ENTFLAG_CANCEL_RELOAD;
+
+    const up = right.cross(forward);
 
     const origin = self.origin.add(CAMERA_OFFSET);
 
@@ -49,9 +92,53 @@ fn shotgunAttack(self: *Entity, ctx: *const Entity.TickContext, forward: linalg.
             .mulScalar(100.0);
 
         const impact = ctx.game.traceLine(origin, linalg.Vec3.zero(), bullet_dir, self.createIgnore()) orelse continue;
+        var flesh = false;
+
         if (impact.entity) |ent| {
-            ent.alive = false;
+            if (ent.max_health > 0.0) {
+                ent.health -= 6.0;
+                if (ent.health < 0.0) {
+                    ent.alive = false;
+                    ctx.game.particles.effectOne(
+                        "DEATH",
+                        ent.origin,
+                        linalg.Vec3.zero(),
+                    ) catch unreachable;
+                }
+                flesh = true;
+            }
         }
+
+        if (flesh) {
+            ctx.game.particles.effectOne(
+                "impact-flesh",
+                origin.add(bullet_dir.mulScalar(impact.time)),
+                impact.plane.xyz(),
+            ) catch unreachable;
+        } else {
+            ctx.game.particles.effectOne(
+                "shotgun-impact",
+                origin.add(bullet_dir.mulScalar(impact.time)),
+                impact.plane.xyz(),
+            ) catch unreachable;
+        }
+
+        ctx.game.particles.effectOne(
+            "shotgun-tracer",
+            origin
+                .add(up.mulScalar(-0.1))
+                .add(right.mulScalar(0.07))
+                .add(forward.mulScalar(0.5 + 0.14)),
+            bullet_dir.mulScalar(impact.time),
+        ) catch unreachable;
+    }
+}
+
+fn shotgunReload(self: *Entity) void {
+    if (self.aux.player.shells_loaded == 0) {
+        self.sequences[0] = shotgun_reload_begin;
+    } else if (self.aux.player.shells_loaded < 5) {
+        self.sequences[0] = shotgun_reload_begin_tac;
     }
 }
 
@@ -70,7 +157,7 @@ fn moveAir(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Vec3)
 
 fn moveGround(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Vec3) void {
     self.velocity = self.velocity.mulScalar(std.math.pow(f32, 0.5, ctx.delta * 20.0));
-    self.velocity = self.velocity.add(movement.mulScalar(ctx.delta * 120.0));
+    self.velocity = self.velocity.add(movement.mulScalar(ctx.delta * 100.0));
 
     self.velocity.data[2] = 0.0;
 
@@ -80,7 +167,7 @@ fn moveGround(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Ve
         self.state = .air;
     }
 
-    if (self.aux.player.last_input.key(.jump)) {
+    if (self.aux.player.last_input.keyPressed(.jump)) {
         self.velocity.data[2] = 10.0;
 
         self.state = .air;
@@ -88,15 +175,29 @@ fn moveGround(self: *Entity, ctx: *const Entity.TickContext, movement: linalg.Ve
 }
 
 fn tickWeapon(self: *Entity, ctx: *const Entity.TickContext, forward: linalg.Vec3, right: linalg.Vec3) void {
-    self.sequences[0].tick(self, ctx);
-
     if (self.sequences[0].flag(SEQFLAG_INTERRUPTIBLE)) {
-        if (self.aux.player.last_input.key(.attack) and self.aux.player.shells_loaded > 0) {
-            self.sequences[0] = shotgun_fire;
+        if (self.aux.player.last_input.keyHeld(.attack)) {
+            if (self.aux.player.shells_loaded > 0) {
+                shotgunAttack(self, ctx, forward, right);
 
-            shotgunAttack(self, ctx, forward, right);
+                self.sequences[0] = shotgun_fire;
+
+                self.aux.player.shells_loaded -= 1;
+            } else {
+                shotgunReload(self);
+            }
+        }
+
+        if (self.aux.player.last_input.keyHeld(.reload)) {
+            shotgunReload(self);
+        }
+    } else {
+        if (self.aux.player.last_input.keyPressed(.attack) and self.sequences[0].flag(SEQFLAG_CANCELLABLE)) {
+            self.flags |= ENTFLAG_CANCEL_RELOAD;
         }
     }
+
+    self.sequences[0].tick(self, ctx);
 }
 
 fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
@@ -114,7 +215,7 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
 
     const movement = horizontal_forward.mulScalar(input.movement[1]).add(right.mulScalar(input.movement[0]));
 
-    const roll_target = std.math.clamp(self.velocity.dot(right) * 0.1, -1.0, 1.0) / -30.0;
+    const roll_target = std.math.clamp(self.velocity.dot(right) * 0.1, -1.0, 1.0) / -15.0;
 
     const roll_interp = 1.0 - std.math.pow(f32, 0.5, ctx.delta * 30.0);
 
@@ -232,7 +333,9 @@ pub fn spawn(self: *Entity, game: *Game) void {
     self.drawTransparent = drawTransparentFn;
 
     self.aux = .{
-        .player = .{},
+        .player = .{
+            .shells_loaded = 5,
+        },
     };
 
     self.sequences[0] = shotgun_idle;

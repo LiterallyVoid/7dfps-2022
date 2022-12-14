@@ -67,7 +67,7 @@ fn processEvent(self: *Self, entity: *Entity, ctx: *const Entity.TickContext, ti
             return time_remaining;
         },
         .frame_range => |range| {
-            if (range.framerate <= 0.0) {
+            if (range.framerate > -0.1 and range.framerate < 0.1) {
                 self.frame = range.start;
 
                 self.current_event -= 1;
@@ -75,7 +75,7 @@ fn processEvent(self: *Self, entity: *Entity, ctx: *const Entity.TickContext, ti
                 return null;
             }
 
-            const range_len = range.end - range.start;
+            const range_len = @fabs(range.end - range.start);
 
             const frames_left = range_len - data.* * range.framerate;
             const frames_available = time_remaining * range.framerate;
@@ -83,7 +83,11 @@ fn processEvent(self: *Self, entity: *Entity, ctx: *const Entity.TickContext, ti
             if (frames_left > frames_available) {
                 data.* += time_remaining;
 
-                self.frame = range.start + data.* * range.framerate;
+                if (range.end < range.start) {
+                    self.frame = range.start - data.* * range.framerate;
+                } else {
+                    self.frame = range.start + data.* * range.framerate;
+                }
 
                 self.current_event -= 1;
 

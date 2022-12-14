@@ -12,6 +12,8 @@ const RenderContext = @import("./RenderContext.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const Model = @import("./Model.zig");
 
+const ParticleMonster = @import("./ParticleMonster.zig");
+
 const ent_player = @import("./entities/player.zig");
 const ent_slasher = @import("./entities/slasher.zig");
 
@@ -23,15 +25,22 @@ pub const Input = struct {
     const Key = enum(u32) {
         jump,
         attack,
+        reload,
     };
 
     angle: [2]f32 = .{ 0.0, 0.0 }, // pitch, yaw
 
     movement: [2]f32 = .{ 0.0, 0.0 },
-    keys: [4]bool = [1]bool{false} ** 4,
 
-    pub fn key(self: Input, k: Key) bool {
-        return self.keys[@enumToInt(k)];
+    keys_held: [4]bool = [1]bool{false} ** 4,
+    keys_pressed: [4]bool = [1]bool{false} ** 4,
+
+    pub fn keyHeld(self: Input, k: Key) bool {
+        return self.keys_held[@enumToInt(k)];
+    }
+
+    pub fn keyPressed(self: Input, k: Key) bool {
+        return self.keys_pressed[@enumToInt(k)];
     }
 };
 
@@ -42,6 +51,8 @@ player: *Entity,
 
 prng: std.rand.DefaultPrng,
 rand: std.rand.Random,
+
+particles: ParticleMonster,
 
 dbg_gizmo: *Model,
 
@@ -55,13 +66,24 @@ pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
         .prng = std.rand.DefaultPrng.init(1337),
         .rand = undefined,
 
+        .particles = undefined,
+
         .dbg_gizmo = try am.load(Model, "dev/gizmo.model"),
     };
+
+    try self.particles.init(am);
 
     self.rand = self.prng.random();
 
     self.player = self.spawn().?;
     ent_player.spawn(self.player, self);
+
+    var i: usize = 0;
+    while (i < 20) : (i += 1) {
+        const slasher = self.spawn().?;
+        ent_slasher.spawn(slasher, self);
+        slasher.origin.data[1] = @intToFloat(f32, i) * -1.0;
+    }
 }
 
 pub fn deinit(self: *Self) void {
@@ -72,7 +94,10 @@ pub fn deinit(self: *Self) void {
         }
     }
 
+    self.particles.deinit(self.asset_manager);
+
     self.asset_manager.drop(self.map);
+    self.asset_manager.drop(self.dbg_gizmo);
 }
 
 pub fn spawn(self: *Self) ?*Entity {
@@ -93,6 +118,8 @@ pub fn input(self: *Self, input_data: Input) void {
 }
 
 pub fn update(self: *Self, delta: f32) void {
+    self.particles.tick(delta);
+
     var ctx = Entity.TickContext{
         .game = self,
         .delta = std.math.min(delta, 1.0 / 15.0),
@@ -139,6 +166,8 @@ pub fn draw(self: *Self, ctx: *RenderContext) void {
     c.glBlendFunc(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
     c.glDepthMask(c.GL_FALSE);
     self.map.drawTransparent(&child_ctx);
+
+    self.particles.draw(&child_ctx);
 
     for (self.entities) |*entity| {
         if (!entity.alive) continue;

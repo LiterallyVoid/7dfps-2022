@@ -13,7 +13,7 @@ const TIMER_WALK_FRAME = 1;
 const TIMER_WALK_WEIGHT = 2;
 const TIMER_ATTACK_FRAME = 3;
 
-const FLAG_HAS_ATTACKED = 0;
+const FLAG_HAS_ATTACKED = 1 << 0;
 
 const keyframe_attack_hurt = 37.0;
 const keyframe_attack_done = 115.0;
@@ -39,13 +39,13 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         self.timers[TIMER_WALK_WEIGHT] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
         self.timers[TIMER_ATTACK_FRAME] += ctx.delta * 60.0;
 
-        if (!self.flags[FLAG_HAS_ATTACKED] and self.timers[TIMER_ATTACK_FRAME] > keyframe_attack_hurt) {
-            self.flags[FLAG_HAS_ATTACKED] = true;
+        if (!self.getFlag(FLAG_HAS_ATTACKED) and self.timers[TIMER_ATTACK_FRAME] > keyframe_attack_hurt) {
+            self.setFlag(FLAG_HAS_ATTACKED);
             attack(self, ctx);
         }
 
         if (self.timers[TIMER_ATTACK_FRAME] > keyframe_attack_done) {
-            self.flags[FLAG_HAS_ATTACKED] = false;
+            self.clearFlag(FLAG_HAS_ATTACKED);
             self.state = .ground;
             self.timers[TIMER_ATTACK_FRAME] = 0.0;
         }
@@ -58,7 +58,7 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         const angle_diff = @mod(target_angle - self.angle.data[2] + std.math.pi, std.math.pi * 2) - std.math.pi;
         self.angle.data[2] += angle_diff * (1.0 - std.math.pow(f32, 0.5, ctx.delta * 4.0));
 
-        const walk_speed: f32 = std.math.min(1.2, delta_to_player.length() / 3.0);
+        const walk_speed: f32 = std.math.min(1.4, delta_to_player.length() / 3.0);
 
         self.timers[TIMER_WALK_WEIGHT] += (walk_speed - self.timers[TIMER_WALK_WEIGHT]) * (1.0 - std.math.pow(f32, 0.5, ctx.delta * 10.0));
         self.timers[TIMER_WALK_FRAME] += ctx.delta * 60.0;
@@ -111,6 +111,9 @@ fn drawFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
 }
 
 pub fn spawn(self: *Entity, game: *Game) void {
+    self.health = 50.0;
+    self.max_health = 50.0;
+
     self.origin = linalg.Vec3.new(2.0, 0.0, 1.2);
     self.half_extents = linalg.Vec3.new(0.6, 0.6, 1.2);
     self.model_offset = linalg.Vec3.new(0.0, 0.0, -1.2);

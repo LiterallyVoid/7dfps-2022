@@ -57,5 +57,5 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
 
 pub fn bind(self: Self, ctx: *RenderContext) void {
     self.shader.bind(ctx);
-    self.texture.bind();
+    self.shader.uniformTexture("u_texture", 0, self.texture);
 }

@@ -1,0 +1,119 @@
+effect DEATH
+	particle
+		texture_1 2 1 1 1
+
+		count 1
+		lifetime 0.3
+
+		size_start 1
+		size_end 8
+		size_curve 0.5
+
+		color_start 0.6 0.1 0.1 0.6
+		color_end 0.6 0.1 0.1 0.6
+
+		gravity 1
+
+		fade 1.0
+
+	particle
+		texture_1 2 1 1 1
+
+		count 32
+
+		lifetime 0.3 0.8
+
+		size_start 0.5 1
+		size_end 0.5 2.5
+
+		drag_start 1.0 1.0
+		drag_end 4.0 4.0
+
+		velocity_intrinsic 0
+		velocity_random 12
+
+		color_start 1.0 0.1 0.1 0.8    0.7 0.1 0.1 0.8
+		color_end 1.0 0.1 0.1 0.8    0.7 0.1 0.1 0.8
+
+		fade 0.6
+
+		gravity 0.1
+		stretch 0.5
+
+effect shotgun-tracer
+	particle
+		texture_1 1 0 1 1
+		lifetime 0.3
+
+		size_start 0.1
+		size_end 0.1
+
+		fade 1.0
+
+		velocity_intrinsic 0.01
+		offset_intrinsic 0.5
+
+		stretch 100.0
+		color_start 0.0 0.3 1.0 0.0    0.2 0.7 1.0 0.0
+		color_end 0.0 0.3 1.0 0.0    0.2 0.7 1.0 0.0
+
+effect impact-flesh
+	particle
+		texture_1 1 1 1 1
+
+		lifetime 0.4 0.6
+
+		size_start 0.5 0.5
+		size_end 0.6 0.6
+
+		drag_start 2.0 2.0
+		drag_end 10.0 10.0
+
+		velocity_intrinsic 3
+		velocity_random 3
+
+		color_start 0.7 0.1 0.1 0.8    0.3 0.1 0.1 0.8
+		color_end 0.7 0.1 0.1 0.8    0.3 0.1 0.1 0.8
+
+		fade 0.6 0.9
+
+		gravity 0.1
+
+effect shotgun-impact
+	particle
+		count 2
+		lifetime 0.4 0.6
+
+		size_start 0.5 0.5
+		size_end 1.0 1.0
+
+		drag_start 0.0 0.0
+		drag_end 4.0 4.0
+
+		velocity_intrinsic 0.5
+		velocity_random 0.5
+
+		color_start 0.8 0.8 0.8 1.0    0.8 0.8 0.8 1.0
+		color_end 0.2 0.2 0.2 0.0    0.2 0.2 0.2 0.0
+
+		fade 0.4 0.6
+
+	particle
+		count 3
+		lifetime 0.25 0.3
+
+		size_start 0.1 0.15
+		size_end 0.2 0.25
+
+		drag_start 0.0 0.0
+		drag_end 20.0 20.0
+
+		velocity_intrinsic 15.0
+		velocity_random 15.0
+
+		color_start 0.0 0.6 1.0 0.2    0.2 0.9 1.0 0.2
+		color_end 0.5 0.5 0.5 1.0    0.5 0.5 0.5 1.0
+
+		fade 0.4 0.8
+		gravity 1.0
+		stretch 0.05

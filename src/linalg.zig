@@ -1,5 +1,9 @@
 const std = @import("std");
 
+pub fn mix(a: anytype, b: anytype, ratio: anytype) @TypeOf(a, b, ratio) {
+    return a * (1.0 - ratio) + b * ratio;
+}
+
 pub fn primitiveCast(comptime Dest: type, item: anytype) Dest {
     const Source = @TypeOf(item);
     return switch (@typeInfo(Dest)) {
@@ -276,6 +280,11 @@ pub fn Vector(comptime dim: comptime_int, comptime Element_: type, comptime mixi
 
         pub fn mix(self: Self, other: Self, ratio: Element) Self {
             return self.mulScalar(1.0 - ratio).add(other.mulScalar(ratio));
+        }
+
+        pub fn mixInt(self: Self, other: Self, ratio: f32) Self {
+            const FVec = Vector(dim, f32, null);
+            return self.toVector(FVec).mulScalar(1.0 - ratio).add(other.toVector(FVec).mulScalar(ratio)).toVector(Self);
         }
 
         pub fn fromArray(comptime T: type, arr: [dim]T) Self {

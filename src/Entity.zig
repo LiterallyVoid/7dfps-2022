@@ -98,6 +98,21 @@ pub fn matrix(self: *Self) linalg.Mat4 {
         .multiply(linalg.Mat4.rotation(linalg.Vec3.new(1.0, 0.0, 0.0), self.angle.data[1]));
 }
 
+pub fn setFlag(self: *Self, flags: u32) void {
+    self.flags |= flags;
+}
+
+pub fn clearFlag(self: *Self, flags: u32) void {
+    self.flags &= ~flags;
+}
+
+pub fn getFlag(self: *Self, flags: u32) bool {
+    return (self.flags & flags) == flags;
+}
+
+health: f32 = -1.0,
+max_health: f32 = -1.0,
+
 alive: bool = false,
 
 tick: *const fn (self: *Self, ctx: *const TickContext) void = noopTick,
@@ -133,7 +148,7 @@ on_ground: bool = false,
 
 models: [16]?*Model = [1]?*Model{null} ** 16,
 
-flags: [32]bool = [1]bool{false} ** 32,
+flags: u32 = 0,
 
 timers: [8]f32 = [1]f32{0.0} ** 8,
 sequences: [2]Sequence = .{undefined} ** 2,

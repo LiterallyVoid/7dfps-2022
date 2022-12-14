@@ -5,6 +5,8 @@ const util = @import("./util.zig");
 const linalg = @import("./linalg.zig");
 const RenderContext = @import("./RenderContext.zig");
 
+const Texture = @import("./Texture.zig");
+
 const Self = @This();
 
 const c = @import("./c.zig");
@@ -60,7 +62,7 @@ fn printInfoLog(path: []const u8, files: *std.ArrayList([]u8), lines: *std.Array
 
     while (info_lines.next()) |line| {
         if (!parseInfoLogLine(files, lines, line)) {
-            std.log.err("{s}", .{line});
+            std.log.err("! {s}", .{line});
         }
     }
 }
@@ -227,4 +229,15 @@ pub fn uniformMatrices(self: Self, comptime name: [:0]const u8, matrices: []cons
     if (location < 0) return;
 
     c.glUniformMatrix4fv(location, @intCast(c_int, matrices.len), c.GL_FALSE, &matrices[0].data[0][0]);
+}
+
+pub fn uniformTexture(self: Self, comptime name: [:0]const u8, slot: u32, texture: *Texture) void {
+    texture.bind(slot);
+
+    const location = c.glGetUniformLocation(self.gl_program, name.ptr);
+    // Note we still bind the texture! By default, all texture uniforms are
+    // bound to slot `0` which means that we don't have to set that uniform.
+    if (location < 0) return;
+
+    c.glUniform1i(location, @intCast(c_int, slot));
 }

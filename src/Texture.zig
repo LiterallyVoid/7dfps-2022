@@ -47,6 +47,7 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
     c.glDeleteTextures(1, &self.gl_texture);
 }
 
-pub fn bind(self: Self) void {
+pub fn bind(self: Self, slot: u32) void {
+    c.glActiveTexture(@intCast(c_uint, c.GL_TEXTURE0) + slot);
     c.glBindTexture(c.GL_TEXTURE_2D, self.gl_texture);
 }
