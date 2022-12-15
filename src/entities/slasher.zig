@@ -20,7 +20,7 @@ const keyframe_attack_done = 115.0;
 
 fn attack(self: *Entity, ctx: *const Entity.TickContext) void {
     const forward = self.matrix().multiplyVector(linalg.Vec4.new(0.0, -1.0, 0.0, 0.0)).xyz();
-    const attack_half_extents = linalg.Vec3.new(1.1, 1.1, 0.2);
+    const attack_half_extents = linalg.Vec3.new(1.1, 1.1, 1.1);
     const attack_origin = self.origin.add(forward.mulScalar(2.5));
 
     var ignore = self.createIgnore();
@@ -29,15 +29,18 @@ fn attack(self: *Entity, ctx: *const Entity.TickContext) void {
     const impact = ctx.game.nudge(attack_origin, attack_half_extents, ignore) orelse return;
 
     if (impact.entity) |ent| {
-        ent.velocity = ent.velocity.add(ent.origin.sub(self.origin).mulScalar(12.0));
-        ent.state = .air;
+        ent.damage(ctx, 50.0, self);
     }
 }
 
 fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
+    self.processEnemyLOS(ctx);
+
+    const delta_to_player = self.target_position.sub(self.origin);
+
     if (self.state == .attack) {
         self.timers[TIMER_WALK_WEIGHT] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
-        self.timers[TIMER_ATTACK_FRAME] += ctx.delta * 60.0;
+        self.timers[TIMER_ATTACK_FRAME] += ctx.delta * 120.0;
 
         if (!self.getFlag(FLAG_HAS_ATTACKED) and self.timers[TIMER_ATTACK_FRAME] > keyframe_attack_hurt) {
             self.setFlag(FLAG_HAS_ATTACKED);
@@ -52,20 +55,28 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
 
         self.velocity = linalg.Vec3.zero();
     } else if (self.state == .ground) {
-        const delta_to_player = ctx.game.player.origin.sub(self.origin);
-
         const target_angle = std.math.atan2(f32, delta_to_player.data[1], delta_to_player.data[0]) + std.math.pi * 0.5;
         const angle_diff = @mod(target_angle - self.angle.data[2] + std.math.pi, std.math.pi * 2) - std.math.pi;
         self.angle.data[2] += angle_diff * (1.0 - std.math.pow(f32, 0.5, ctx.delta * 4.0));
 
-        const walk_speed: f32 = std.math.min(1.4, delta_to_player.length() / 3.0);
+        const walk_speedup = 2.0;
 
-        self.timers[TIMER_WALK_WEIGHT] += (walk_speed - self.timers[TIMER_WALK_WEIGHT]) * (1.0 - std.math.pow(f32, 0.5, ctx.delta * 10.0));
-        self.timers[TIMER_WALK_FRAME] += ctx.delta * 60.0;
+        var walk_speed: f32 = if (self.victory) 0.0 else 2.5;
+
+        if (self.has_los) {
+            walk_speed = std.math.min(2.5, delta_to_player.length() / 3.0);
+        } else {
+            if (delta_to_player.length() < 0.5) {
+                self.target_position = self.target_position.add(delta_to_player.normalized().mulScalar(-10.0));
+            }
+        }
+
+        self.timers[TIMER_WALK_WEIGHT] += (walk_speed / walk_speedup - self.timers[TIMER_WALK_WEIGHT]) * (1.0 - std.math.pow(f32, 0.5, ctx.delta * 10.0));
+        self.timers[TIMER_WALK_FRAME] += ctx.delta * 60.0 * walk_speedup;
         self.timers[TIMER_WALK_FRAME] = @mod(self.timers[TIMER_WALK_FRAME], 60.0);
 
         self.timers[TIMER_ATTACK] -= ctx.delta;
-        if (self.timers[TIMER_ATTACK] < 0.0 and delta_to_player.length() < 3.5) {
+        if (self.timers[TIMER_ATTACK] < 0.0 and delta_to_player.length() < 3.5 and self.has_los) {
             self.timers[TIMER_ATTACK] = ctx.game.rand.float(f32) * 2.0 + 1.0;
             self.state = .attack;
         }
@@ -111,8 +122,10 @@ fn drawFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
 }
 
 pub fn spawn(self: *Entity, game: *Game) void {
-    self.health = 50.0;
-    self.max_health = 50.0;
+    self.team = .enemy;
+
+    self.health = 100.0;
+    self.max_health = 100.0;
 
     self.origin = linalg.Vec3.new(2.0, 0.0, 1.2);
     self.half_extents = linalg.Vec3.new(0.6, 0.6, 1.2);

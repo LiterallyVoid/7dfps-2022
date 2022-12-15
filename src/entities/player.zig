@@ -7,6 +7,7 @@ const RenderContext = @import("../RenderContext.zig");
 const Entity = @import("../Entity.zig");
 const Model = @import("../Model.zig");
 const Sequence = @import("../Sequence.zig");
+const Inter = @import("../Inter.zig");
 
 const STEPHEIGHT = 0.2;
 
@@ -19,6 +20,7 @@ const SEQFLAG_EXTRA_ROUND = 1 << 1;
 const SEQFLAG_CANCELLABLE = 1 << 2;
 
 const SHOTGUN_FRAMERATE = 60.0;
+const SHOTGUN_RELOAD_FRAMERATE = 90.0;
 
 const shotgun_idle = Sequence.init(&.{
     .{ .set_flags = SEQFLAG_INTERRUPTIBLE },
@@ -36,28 +38,28 @@ const shotgun_fire = Sequence.init(&.{
 });
 
 const shotgun_reload_begin = Sequence.init(&.{
-    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .set_flags = SEQFLAG_EXTRA_ROUND | SEQFLAG_CANCELLABLE },
-    .{ .frame_range = .{ .start = 213.0, .end = 241.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 213.0, .end = 241.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .call_function = .{ .callback = sLoadShell } },
 });
 
 const shotgun_reload_begin_tac = Sequence.init(&.{
-    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 181.0, .end = 200.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .replace_with = &shotgun_reload_shell },
 });
 
 const shotgun_reload_shell = Sequence.init(&.{
     .{ .set_flags = SEQFLAG_CANCELLABLE },
     .{ .set_flags = SEQFLAG_EXTRA_ROUND },
-    .{ .frame_range = .{ .start = 242.0, .end = 272.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 242.0, .end = 272.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .call_function = .{ .callback = sLoadShell } },
 });
 
 const shotgun_reload_end = Sequence.init(&.{
-    .{ .frame_range = .{ .start = 273.0, .end = 303.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 273.0, .end = 303.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .set_flags = SEQFLAG_INTERRUPTIBLE },
-    .{ .frame_range = .{ .start = 303.0, .end = 315.0, .framerate = SHOTGUN_FRAMERATE } },
+    .{ .frame_range = .{ .start = 303.0, .end = 315.0, .framerate = SHOTGUN_RELOAD_FRAMERATE } },
     .{ .replace_with = &shotgun_idle },
 });
 
@@ -82,7 +84,7 @@ fn shotgunAttack(self: *Entity, ctx: *const Entity.TickContext, forward: linalg.
 
     var pellets: usize = 10;
 
-    const spread: [2]f32 = .{ 0.2, 0.05 };
+    const spread: [2]f32 = .{ 0.1, 0.05 };
 
     while (pellets > 0) : (pellets -= 1) {
         const bullet_dir =
@@ -95,18 +97,8 @@ fn shotgunAttack(self: *Entity, ctx: *const Entity.TickContext, forward: linalg.
         var flesh = false;
 
         if (impact.entity) |ent| {
-            if (ent.max_health > 0.0) {
-                ent.health -= 6.0;
-                if (ent.health < 0.0) {
-                    ent.alive = false;
-                    ctx.game.particles.effectOne(
-                        "DEATH",
-                        ent.origin,
-                        linalg.Vec3.zero(),
-                    ) catch unreachable;
-                }
-                flesh = true;
-            }
+            if (ent.max_health > 0) flesh = true;
+            ent.damage(ctx, 6.0, self);
         }
 
         if (flesh) {
@@ -285,15 +277,13 @@ fn drawFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
 
     child_ctx.matrix_projection = linalg.Mat4.perspective(1.1, ctx.aspect, 0.01, 10.0);
 
-    const camera =
-        linalg.Mat4.translation(0.076, -0.1, -0.14)
+    const model_matrix =
+        ctx.matrix_camera_to_world
+        .multiply(linalg.Mat4.translation(0.076, -0.1, -0.14))
         .multiply(linalg.Mat4.rotation(linalg.Vec3.new(1.0, 0.0, 0.0), std.math.pi * -0.5));
 
-    child_ctx.matrix_camera_to_world = camera.inverse();
-    child_ctx.matrix_world_to_camera = camera;
-
     c.glDepthRange(0.0, 0.1);
-    self.models[1].?.drawFiltered(&child_ctx, linalg.Mat4.identity(), &frames, "grid");
+    self.models[1].?.drawFiltered(&child_ctx, model_matrix, &frames, "grid");
     c.glDepthRange(0.0, 1.0);
 
     game.dbg_gizmo.draw(ctx, linalg.Mat4.translationVector(self.debug_position), &frames);
@@ -308,19 +298,36 @@ fn drawTransparentFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
 
     child_ctx.matrix_projection = linalg.Mat4.perspective(1.1, ctx.aspect, 0.01, 10.0);
 
-    const camera =
-        linalg.Mat4.translation(0.076, -0.1, -0.14)
+    const model_matrix =
+        ctx.matrix_camera_to_world
+        .multiply(linalg.Mat4.translation(0.076, -0.1, -0.14))
         .multiply(linalg.Mat4.rotation(linalg.Vec3.new(1.0, 0.0, 0.0), std.math.pi * -0.5));
 
-    child_ctx.matrix_camera_to_world = camera.inverse();
-    child_ctx.matrix_world_to_camera = camera;
-
     c.glDepthRange(0.0, 0.1);
-    self.models[1].?.drawFiltered(&child_ctx, linalg.Mat4.identity(), &frames, "shaders");
+    self.models[1].?.drawFiltered(&child_ctx, model_matrix, &frames, "shaders");
     c.glDepthRange(0.0, 1.0);
 }
 
+fn drawUIFn(self: *Entity, game: *Game, into: *Inter.Viewport) void {
+    _ = game;
+
+    var buf: [1024]u8 = undefined;
+    const health = std.fmt.bufPrint(&buf, "{}", .{ @floatToInt(i32, self.health) }) catch "???";
+
+    into.next().anchored(.{0.1, 0.9}, .{0.0, 1.0}).fontSize(100.0).text(health).pad(.{20.0, 10.0}).done();
+
+    const ammo = std.fmt.bufPrint(&buf, "{}/5", .{ self.aux.player.shells_loaded }) catch "???";
+    into.next().anchored(.{0.9, 0.9}, .{1.0, 1.0}).fontSize(100.0).text(ammo).pad(.{20.0, 10.0}).done();
+
+    into.next().anchored(.{0.0, 0.0}, .{0.0, 0.0}).fontSize(30.0).color(.{255, 48, 48, 255}).text("LIGHTING NEEDS TO BE REBUILT (5 unbuilt objects)").done();
+}
+
 pub fn spawn(self: *Entity, game: *Game) void {
+    self.team = .player;
+
+    self.health = 100.0;
+    self.max_health = 100.0;
+
     self.origin = linalg.Vec3.new(-2.0, 0.0, 1.2);
     self.half_extents = linalg.Vec3.new(0.6, 0.6, 1.2);
 
@@ -331,6 +338,7 @@ pub fn spawn(self: *Entity, game: *Game) void {
     self.camera = cameraFn;
     self.draw = drawFn;
     self.drawTransparent = drawTransparentFn;
+    self.drawUI = drawUIFn;
 
     self.aux = .{
         .player = .{

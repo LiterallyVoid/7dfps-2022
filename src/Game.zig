@@ -12,10 +12,12 @@ const RenderContext = @import("./RenderContext.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const Model = @import("./Model.zig");
 
+const Inter = @import("./Inter.zig");
 const ParticleMonster = @import("./ParticleMonster.zig");
 
 const ent_player = @import("./entities/player.zig");
 const ent_slasher = @import("./entities/slasher.zig");
+const ent_gunner = @import("./entities/gunner.zig");
 
 const Self = @This();
 
@@ -77,12 +79,19 @@ pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
 
     self.player = self.spawn().?;
     ent_player.spawn(self.player, self);
+    self.player.origin = linalg.Vec3.new(-10.0, -15.0, -3.0);
 
     var i: usize = 0;
     while (i < 20) : (i += 1) {
-        const slasher = self.spawn().?;
-        ent_slasher.spawn(slasher, self);
-        slasher.origin.data[1] = @intToFloat(f32, i) * -1.0;
+        const gunner = self.spawn().?;
+
+        if (self.rand.float(f32) < 0.5) {
+            ent_gunner.spawn(gunner, self);
+        } else {
+            ent_slasher.spawn(gunner, self);
+        }
+
+        gunner.origin.data[1] = @intToFloat(f32, i) * -0.3;
     }
 }
 
@@ -160,7 +169,7 @@ pub fn draw(self: *Self, ctx: *RenderContext) void {
         entity.draw(entity, self, ctx);
     }
 
-    self.player.draw(self.player, self, ctx);
+    if (self.player.alive) self.player.draw(self.player, self, ctx);
 
     c.glEnable(c.GL_BLEND);
     c.glBlendFunc(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
@@ -176,10 +185,15 @@ pub fn draw(self: *Self, ctx: *RenderContext) void {
         entity.drawTransparent(entity, self, ctx);
     }
 
-    self.player.drawTransparent(self.player, self, ctx);
+    if (self.player.alive) self.player.drawTransparent(self.player, self, ctx);
 
     c.glDisable(c.GL_BLEND);
     c.glDepthMask(c.GL_TRUE);
+}
+
+pub fn drawUI(self: *Self, into: *Inter.Viewport) void {
+    into.anchor();
+    if (self.player.alive) self.player.drawUI(self.player, self, into);
 }
 
 fn boxTraceLine(point: linalg.Vec3, half_extents: linalg.Vec3, direction: linalg.Vec3, ent_origin: linalg.Vec3, ent_half_extents: linalg.Vec3) ?PhysicsMesh.Impact {

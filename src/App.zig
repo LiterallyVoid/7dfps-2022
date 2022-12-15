@@ -11,6 +11,8 @@ const Map = @import("./Map.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const RenderContext = @import("./RenderContext.zig");
 const Game = @import("./Game.zig");
+const Inter = @import("./Inter.zig");
+const Menu = @import("./Menu.zig");
 
 const Self = @This();
 
@@ -42,6 +44,10 @@ movement_keys: [4]bool,
 game: Game,
 game_input: Game.Input,
 
+inter: Inter,
+
+menu: Menu,
+
 pub fn init(self: *Self) !void {
     self.window = c.glfwCreateWindow(640, 480, "7dfps 2022", null, null) orelse return error.GLFWWindowFailed;
     errdefer c.glfwDestroyWindow(self.window);
@@ -49,10 +55,11 @@ pub fn init(self: *Self) !void {
     c.glfwMakeContextCurrent(self.window);
     if (c.gladLoadGL(c.glfwGetProcAddress) == 0) return error.OpenGLLoadFailed;
 
-    self.asset_manager = asset.Manager{
-        .prefix = "data",
-    };
+    self.asset_manager = asset.Manager.init("data");
     //errdefer self.asset_manager.deinit();
+
+    try Inter.init(&self.inter, &self.asset_manager);
+    try self.menu.init(&self.asset_manager);
 
     try self.game.init(&self.asset_manager, "maps/sandbox.map");
 
@@ -60,6 +67,7 @@ pub fn init(self: *Self) !void {
         c.glfwSetInputMode(self.window, c.GLFW_RAW_MOUSE_MOTION, c.GLFW_TRUE);
     }
 
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
     c.glEnable(c.GL_DEPTH_TEST);
 
     self.time = c.glfwGetTime();
@@ -116,12 +124,16 @@ pub fn init(self: *Self) !void {
     _ = c.glfwSetCursorPosCallback(self.window, cursorCallback);
     _ = c.glfwSetMouseButtonCallback(self.window, mouseButtonCallback);
     _ = c.glfwSetKeyCallback(self.window, keyCallback);
+    _ = c.glfwSetWindowFocusCallback(self.window, focusCallback);
 }
 
 pub fn deinit(self: *Self) void {
-    c.glfwDestroyWindow(self.window);
     self.bindings.deinit();
     self.game.deinit();
+    self.menu.deinit(&self.asset_manager);
+    self.inter.deinit(&self.asset_manager);
+    self.asset_manager.deinit();
+    c.glfwDestroyWindow(self.window);
 }
 
 pub fn run(self: *Self) void {
@@ -155,19 +167,19 @@ fn cursorCallback(window: ?*c.GLFWwindow, x: f64, y: f64) callconv(.C) void {
 
     self.last_mouse_position = .{ x, y };
 
-    self.game_input.angle[1] -= @floatCast(f32, dx) * 0.022 * 0.006;
-    self.game_input.angle[0] -= @floatCast(f32, dy) * 0.022 * 0.006;
+    if (!self.menu.visible) {
+        self.game_input.angle[1] -= @floatCast(f32, dx) * 0.022 * 0.006;
+        self.game_input.angle[0] -= @floatCast(f32, dy) * 0.022 * 0.006;
 
-    self.game_input.angle[1] = @mod(self.game_input.angle[1], std.math.pi * 2);
-    self.game_input.angle[0] = std.math.clamp(self.game_input.angle[0], 0.0, std.math.pi);
+        self.game_input.angle[1] = @mod(self.game_input.angle[1], std.math.pi * 2);
+        self.game_input.angle[0] = std.math.clamp(self.game_input.angle[0], 0.0, std.math.pi);
+    }
 }
 
 fn mouseButtonCallback(window: ?*c.GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {
     const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
 
     _ = mods;
-
-    c.glfwSetInputMode(self.window, c.GLFW_CURSOR, c.GLFW_CURSOR_DISABLED);
 
     if (action == c.GLFW_PRESS) {
         self.bindingSet(.{ .mouse_button = button }, true);
@@ -182,14 +194,41 @@ fn keyCallback(window: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_in
     _ = scancode;
     _ = mods;
 
-    if (action == c.GLFW_PRESS) {
-        self.bindingSet(.{ .key = key }, true);
-    } else if (action == c.GLFW_RELEASE) {
-        self.bindingSet(.{ .key = key }, false);
+    if (!self.menu.visible) {
+        if (action == c.GLFW_PRESS) {
+            self.bindingSet(.{ .key = key }, true);
+        } else if (action == c.GLFW_RELEASE) {
+            self.bindingSet(.{ .key = key }, false);
+        }
     }
 
-    if (key == c.GLFW_KEY_ESCAPE) {
+    if (key == c.GLFW_KEY_ESCAPE and action == c.GLFW_PRESS) {
+        self.menu.handleEsc();
+
+        if (self.menu.visible) {
+            c.glfwSetInputMode(self.window, c.GLFW_CURSOR, c.GLFW_CURSOR_NORMAL);
+            self.onBlur();
+        } else {
+            c.glfwSetInputMode(self.window, c.GLFW_CURSOR, c.GLFW_CURSOR_DISABLED);
+        }
+    }
+}
+
+fn focusCallback(window: ?*c.GLFWwindow, focused: c_int) callconv(.C) void {
+    const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
+
+    if (focused != c.GLFW_TRUE) {
+        self.menu.visible = true;
         c.glfwSetInputMode(self.window, c.GLFW_CURSOR, c.GLFW_CURSOR_NORMAL);
+        self.onBlur();
+    }
+}
+
+fn onBlur(self: *Self) void {
+    var it = self.bindings.iterator();
+
+    while (it.next()) |entry| {
+        self.bindingSet(entry.key_ptr.*, false);
     }
 }
 
@@ -224,8 +263,36 @@ fn tick(self: *Self) void {
     if (self.movement_keys[3]) self.game_input.movement[0] += 1.0;
 
     self.game.input(self.game_input);
-    self.game.update(delta);
+
+    if (!self.menu.visible) {
+        self.game.update(delta);
+    }
+
     self.game.draw(&ctx);
+
+    {
+        var screen_ = self.inter.begin(.{
+            @intToFloat(f32, framebuffer_size[0]),
+            @intToFloat(f32, framebuffer_size[1]),
+        });
+        var screen = screen_.contentScale(2.0);
+        defer self.inter.flush(screen);
+        defer screen.done();
+
+        {
+            const game = screen.next();
+            defer game.done();
+
+            self.game.drawUI(game);
+        }
+
+        {
+            const menu = screen.next();
+            defer menu.done();
+
+            self.menu.drawUI(menu);
+        }
+    }
 
     for (self.game_input.keys_pressed) |*key| {
         key.* = false;

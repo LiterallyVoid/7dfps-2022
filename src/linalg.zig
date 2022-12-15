@@ -63,6 +63,10 @@ pub fn Vector(comptime dim: comptime_int, comptime Element_: type, comptime mixi
                     };
                 }
 
+                pub fn xy(self: Self) Vec2 {
+                    return Vec2{ .data = .{ self.data[0], self.data[1] } };
+                }
+
                 pub fn xyzw(self: Self, w: f32) Vec4 {
                     return Vec4{ .data = [_]Element{ self.data[0], self.data[1], self.data[2], w } };
                 }

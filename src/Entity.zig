@@ -6,6 +6,7 @@ const RenderContext = @import("./RenderContext.zig");
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const Model = @import("./Model.zig");
 const Sequence = @import("./Sequence.zig");
+const Inter = @import("./Inter.zig");
 
 const Self = @This();
 
@@ -110,6 +111,67 @@ pub fn getFlag(self: *Self, flags: u32) bool {
     return (self.flags & flags) == flags;
 }
 
+pub fn processEnemyLOS(self: *Self, ctx: *const TickContext) void {
+    if (!ctx.game.player.alive) {
+        self.has_los = false;
+        self.victory = true;
+        return;
+    }
+
+    if (self.los_timer > 0.0) {
+        if (self.has_los) {
+            self.target_position = ctx.game.player.origin;
+        }
+
+        self.los_timer -= ctx.delta;
+        return;
+    }
+
+    self.los_timer = 0.1;
+
+    const delta_to_player = ctx.game.player.origin.sub(self.origin);
+
+    self.has_los = false;
+    var los_ignore = self.createIgnore();
+    los_ignore.team = self.team;
+
+    if (ctx.game.traceLine(self.origin, linalg.Vec3.zero(), delta_to_player.mulScalar(100.0), los_ignore)) |los_impact| {
+        if (los_impact.entity == ctx.game.player) {
+            self.has_los = true;
+        }
+    }
+
+    if (self.has_los) {
+        self.target_position = ctx.game.player.origin;
+    }
+}
+
+pub const Team = enum {
+    neutral,
+    player,
+    enemy,
+};
+
+pub fn damage(self: *Self, ctx: *const TickContext, dmg: f32, source: *Self) void {
+    if (self.max_health < 0.0) return;
+    self.health -= dmg;
+
+    if (self.health <= 0.0) {
+        self.alive = false;
+
+        ctx.game.particles.effectOne(
+            "DEATH",
+            self.origin,
+            linalg.Vec3.zero(),
+        ) catch unreachable;
+    }
+
+    self.velocity = self.velocity.add(source.origin.sub(self.origin).normalized().mulScalar(-dmg));
+    if (self.velocity.data[2] > 1.0) {
+        self.state = .air;
+    }
+}
+
 health: f32 = -1.0,
 max_health: f32 = -1.0,
 
@@ -120,6 +182,7 @@ draw: *const fn (self: *Self, game: *Game, ctx: *RenderContext) void = noopDraw,
 drawTransparent: *const fn (self: *Self, game: *Game, ctx: *RenderContext) void = noopDraw,
 input: *const fn (self: *Self, game: *Game, input: Game.Input) void = undefined,
 camera: *const fn (self: *Self, game: *Game, ctx: *RenderContext) void = undefined,
+drawUI: *const fn (self: *Self, game: *Game, into: *Inter.Viewport) void = undefined,
 
 aux: union(enum) {
     player: struct {
@@ -154,3 +217,14 @@ timers: [8]f32 = [1]f32{0.0} ** 8,
 sequences: [2]Sequence = .{undefined} ** 2,
 
 debug_position: linalg.Vec3 = linalg.Vec3.zero(),
+
+// only for gunner! nobody else gets it
+view_angle: [2]f32 = .{ 0.0, 0.0 },
+target_position: linalg.Vec3 = linalg.Vec3.zero(),
+
+has_los: bool = false,
+los_timer: f32 = 0.0,
+
+victory: bool = false,
+
+team: Team = .neutral,

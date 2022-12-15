@@ -33,7 +33,7 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
     c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, width, height, 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, pixels);
     c.glGenerateMipmap(c.GL_TEXTURE_2D);
 
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR_MIPMAP_LINEAR);
 
     return Self{
@@ -50,4 +50,8 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
 pub fn bind(self: Self, slot: u32) void {
     c.glActiveTexture(@intCast(c_uint, c.GL_TEXTURE0) + slot);
     c.glBindTexture(c.GL_TEXTURE_2D, self.gl_texture);
+}
+
+pub fn eql(self: Self, other: Self) bool {
+    return self.gl_texture == other.gl_texture;
 }

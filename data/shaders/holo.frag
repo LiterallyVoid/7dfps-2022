@@ -15,7 +15,7 @@ void main() {
 
 	frag_color = vec4(fresnel);
 
-	frag_color.rgb *= vec3(0.4, 0.8, 1.2);
+	frag_color.rgb *= vec3(0.1, 0.3, 0.5);
 
 	frag_color.a = 0.0;
 }

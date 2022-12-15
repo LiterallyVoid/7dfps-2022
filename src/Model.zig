@@ -253,16 +253,13 @@ fn calculateBones(self: Self, frames: []const ModelFrame) [64]linalg.Mat4 {
         }
 
         for (frames) |frame_info| {
-            var frame_int = @floatToInt(usize, frame_info.frame);
-
-            if (frame_int > self.frames_count - 1) {
-                frame_int = self.frames_count - 1;
-            }
+            const frame_int = std.math.clamp(@floatToInt(usize, frame_info.frame), 0, self.frames_count - 1);
+            const next_frame = std.math.clamp(frame_int + 1, 0, self.frames_count - 1);
 
             var frame_fraction = frame_info.frame - @intToFloat(f32, frame_int);
 
             var f1 = bone.frames[frame_int];
-            var f2 = bone.frames[frame_int + 1];
+            var f2 = bone.frames[next_frame];
 
             var matrix = f1.multiplyScalar(1.0 - frame_fraction).addElementwise(f2.multiplyScalar(frame_fraction));
 

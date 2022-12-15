@@ -11,6 +11,10 @@ const Self = @This();
 pub const LoadInfo = struct {
     path: []const u8,
     options: Options = .{},
+
+    pub fn serialize(self: LoadInfo) []u8 {
+        return std.fmt.allocPrint(util.allocator, "{s}/{}", .{ self.path, self.options.skeletal }) catch unreachable;
+    }
 };
 
 pub const Options = struct {
@@ -22,6 +26,10 @@ options: Options,
 transparent: bool = false,
 shader: *Shader,
 texture: *Texture,
+
+pub fn serializeInfo(info: LoadInfo) []u8 {
+    return info.serialize();
+}
 
 pub fn init(am: *asset.Manager, info: LoadInfo) !Self {
     var shader: *Shader = undefined;
@@ -57,5 +65,5 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
 
 pub fn bind(self: Self, ctx: *RenderContext) void {
     self.shader.bind(ctx);
-    self.shader.uniformTexture("u_texture", 0, self.texture);
+    self.shader.uniformTexture("u_texture", 0, self.texture.*);
 }

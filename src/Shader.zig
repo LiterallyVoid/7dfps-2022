@@ -210,6 +210,10 @@ pub fn deinit(self: Self, am: *asset.Manager) void {
     c.glDeleteProgram(self.gl_program);
 }
 
+pub fn bindRaw(self: Self) void {
+    c.glUseProgram(self.gl_program);
+}
+
 pub fn bind(self: Self, ctx: *RenderContext) void {
     c.glUseProgram(self.gl_program);
 
@@ -231,7 +235,7 @@ pub fn uniformMatrices(self: Self, comptime name: [:0]const u8, matrices: []cons
     c.glUniformMatrix4fv(location, @intCast(c_int, matrices.len), c.GL_FALSE, &matrices[0].data[0][0]);
 }
 
-pub fn uniformTexture(self: Self, comptime name: [:0]const u8, slot: u32, texture: *Texture) void {
+pub fn uniformTexture(self: Self, comptime name: [:0]const u8, slot: u32, texture: Texture) void {
     texture.bind(slot);
 
     const location = c.glGetUniformLocation(self.gl_program, name.ptr);

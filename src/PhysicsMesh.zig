@@ -9,9 +9,10 @@ const Self = @This();
 pub const Ignore = struct {
     entity: ?*Entity = null,
     map: bool = false,
+    team: ?Entity.Team = null,
 
     pub fn doesIgnoreEntity(self: Ignore, other: *Entity) bool {
-        return self.entity == other;
+        return self.entity == other or self.team == other.team;
     }
 };
 

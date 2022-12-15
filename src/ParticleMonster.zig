@@ -32,7 +32,7 @@ const ParticleDefinition = struct {
     gravity: f32 = 0.0,
 
     texture_1: [4]u8 = .{ 0, 0, 1, 1 },
-    texture_2: [4]u8 = .{ 0, 0, 0, 0 },
+    texture_2: [4]u8 = .{ 0, 0, 1, 1 },
 
     size_start: [2]f32 = .{ 1.0, 1.0 },
     size_end: [2]f32 = .{ 1.0, 1.0 },
@@ -173,50 +173,7 @@ const Vertex = struct {
     uv2: [2]u16,
 };
 
-const QuadList = struct {
-    mesh: Mesh,
-
-    vertices: [1024]Vertex,
-    vertices_count: usize,
-
-    pub fn init() QuadList {
-        return QuadList{
-            .mesh = Mesh.init(.{ .static = false, .indexed = false }, Vertex),
-
-            .vertices = undefined,
-            .vertices_count = 0,
-        };
-    }
-
-    pub fn addQuad(self: *QuadList, vertices: [4]Vertex) void {
-        const to_append = [_]Vertex{
-            vertices[0],
-            vertices[1],
-            vertices[3],
-            vertices[3],
-            vertices[2],
-            vertices[0],
-        };
-
-        for (to_append) |vert| {
-            self.vertices[self.vertices_count] = vert;
-            self.vertices_count += 1;
-        }
-
-        if (self.vertices_count > 1000) {
-            self.flush();
-        }
-    }
-
-    pub fn flush(self: *QuadList) void {
-        if (self.vertices_count == 0) return;
-
-        self.mesh.upload(Vertex, self.vertices[0..self.vertices_count]);
-        self.mesh.draw(0, self.vertices_count);
-
-        self.vertices_count = 0;
-    }
-};
+const QuadList = @import("./quad_list.zig").QuadList(Vertex);
 
 const Particle = struct {
     current_time: f32 = 0.0,
@@ -256,9 +213,25 @@ const Particle = struct {
     }
 
     fn setUvs(x: usize, y: usize, uvs: *[2]u16, texture: [4]u8) void {
-        const grid_x = @intToFloat(f32, texture[0] + @intCast(u8, x) * texture[2]);
-        const grid_y = @intToFloat(f32, texture[1] + @intCast(u8, y) * texture[3]);
+        var grid_x = @intToFloat(f32, texture[0] + @intCast(u8, x) * texture[2]);
+        var grid_y = @intToFloat(f32, texture[1] + @intCast(u8, y) * texture[3]);
+
+        const margin = 0.05;
+
+        if (x == 0) {
+            grid_x += margin;
+        } else {
+            grid_x -= margin;
+        }
+
+        if (y == 0) {
+            grid_y += margin;
+        } else {
+            grid_y -= margin;
+        }
+
         uvs.* = .{ @floatToInt(u16, grid_x / ATLAS_CELLS_F * 65535.0), @floatToInt(u16, grid_y / ATLAS_CELLS_F * 65535.0) };
+
     }
 
     fn drawFlat(self: *Particle, into: *QuadList, color: [4]u8, half_size: f32, camera_position: linalg.Vec3, camera_directions: [3]linalg.Vec3) void {
@@ -297,16 +270,16 @@ const Particle = struct {
         stretch_vec = stretch_vec.add(side_vec.cross(camera_directions[2]).mulScalar(half_size));
 
         for (vertices) |*vertex, i| {
-            var x = i % 2;
-            var y = i / 2;
+            var x = i / 2;
+            var y = i % 2;
 
             var x_sign: f32 = @intToFloat(f32, x) * 2.0 - 1.0;
             var y_sign: f32 = @intToFloat(f32, y) * 2.0 - 1.0;
 
             vertex.position = self.position
                 .add(camera_directions[2].mulScalar(-half_size))
-                .add(side_vec.mulScalar(x_sign))
-                .add(stretch_vec.mulScalar(y_sign))
+                .add(stretch_vec.mulScalar(x_sign))
+                .add(side_vec.mulScalar(y_sign))
                 .toArray(f32);
 
             vertex.color = color;
@@ -323,7 +296,7 @@ const Particle = struct {
 
         var fade = if (self.current_time > 1.0 - self.fade)
             1.0 - (((1.0 - self.current_time) / self.fade))
-            else
+        else
             0.0;
 
         const color =
@@ -694,7 +667,7 @@ fn particleCompare(camera_position: linalg.Vec3, a: Particle, b: Particle) bool 
 
 pub fn draw(self: *Self, context: *RenderContext) void {
     self.shader.bind(context);
-    self.shader.uniformTexture("u_texture", 0, self.texture);
+    self.shader.uniformTexture("u_texture", 0, self.texture.*);
     defer self.quads.flush();
 
     var camera_matrix = context.matrix_world_to_camera.toMat3();
