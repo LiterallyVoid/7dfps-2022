@@ -59,6 +59,9 @@ const Full = struct {
 const List = struct {
     pub const Options = struct {
         reverse: bool = false,
+        justify: f32 = 0.0,
+
+        fill_items: ?u32 = null,
     };
 
     primary_axis: u32,
@@ -69,11 +72,20 @@ const List = struct {
     pub fn sizeForChild(self: *List, vp: *Viewport) [2]?f32 {
         var size = vp.size_hint;
         size[self.primary_axis] = null;
+
+        if (self.options.fill_items) |fill| {
+            if (vp.size_hint[self.primary_axis] != null) {
+                size[self.primary_axis] = vp.size_hint[self.primary_axis].? / @intToFloat(f32, fill);
+            }
+        }
+
         return size;
     }
 
     pub fn done(self: *List, vp: *Viewport) void {
         var accum: f32 = 0.0;
+
+        var sign: f32 = if (self.options.reverse) -1.0 else 1.0;
 
         for (vp.children.items) |*child| {
             if (self.options.reverse) {
@@ -84,7 +96,16 @@ const List = struct {
                 child.offset[self.primary_axis] += accum;
                 accum += child.outer_size[self.primary_axis];
             }
+
+            vp.outer_size[self.secondary_axis] = std.math.max(vp.outer_size[self.secondary_axis], child.outer_size[self.secondary_axis]);
         }
+
+        const extra = sign * (vp.size_hint[self.primary_axis].? - accum) * self.options.justify;
+        for (vp.children.items) |*child| {
+            child.offset[self.primary_axis] += extra;
+        }
+
+        vp.outer_size[self.primary_axis] = vp.size_hint[self.primary_axis] orelse accum;
     }
 };
 
@@ -101,8 +122,13 @@ const Anchor = struct {
 
         for (vp.children.items) |*child| {
             for (child.offset) |*offs, i| {
-                offs.* += child.anchor_ratio[i] * vp.size_hint[i].?;
+                if (vp.size_hint[i]) |sz_hint| {
+                    offs.* += child.anchor_ratio[i] * sz_hint;
+                }
+
                 offs.* -= child.anchor_gravity[i] * child.outer_size[i];
+
+                vp.outer_size[i] = std.math.max(vp.outer_size[i], child.outer_size[i] + child.offset[i]);
             }
         }
     }
@@ -140,17 +166,16 @@ pub const Viewport = struct {
     anchor_ratio: [2]f32 = .{ 0.0, 0.0 },
     anchor_gravity: [2]f32 = .{ 0.0, 0.0 },
 
+    id: ?u32 = null,
+
     pub fn done(self: *Viewport) void {
         // self.quads.append(util.allocator, Quad {
         //     .shader = self.inter.flat_shader.*,
         //     .texture = null,
-        //     .box = .{-self.offset[0], -self.offset[1], self.size_hint[0] orelse self.outer_size[0], self.size_hint[1] orelse self.outer_size[1]},
+        //     .box = .{-self.quads_offset[0], -self.quads_offset[1], self.size_hint[0] orelse self.outer_size[0], self.size_hint[1] orelse self.outer_size[1]},
         //     .uv_box = .{ 0.0, 0.0, 0.0, 0.0 },
         //     .color = .{ 32, 0, 0, 32 },
         // }) catch unreachable;
-
-        self.offset[0] /= self.content_scale;
-        self.offset[1] /= self.content_scale;
 
         self.outer_size[0] /= self.content_scale;
         self.outer_size[1] /= self.content_scale;
@@ -219,13 +244,29 @@ pub const Viewport = struct {
         return self;
     }
 
-    pub fn draw(self: *Viewport, outer_matrix: linalg.Mat4, size: [2]f32) void {
+    pub fn draw(self: *Viewport, outer_matrix: linalg.Mat4, size: [2]f32, mouse_c: [2]f32) void {
+        var mouse = mouse_c;
+
         var matrix = outer_matrix;
 
         matrix = matrix.multiply(linalg.Mat4.translation(self.offset[0], self.offset[1], 0.0));
+        mouse[0] -= self.offset[0];
+        mouse[1] -= self.offset[1];
+
+        if (self.id) |id| {
+            if (mouse[0] > 0.0 and mouse[0] <= self.outer_size[0] and mouse[1] > 0.0 and mouse[1] <= self.outer_size[1]) {
+                self.inter.hover = id;
+                self.inter.hover_mouse = .{
+                    mouse[0] / self.outer_size[0],
+                    mouse[1] / self.outer_size[1],
+                };
+            }
+        }
 
         if (self.content_scale != 1.0) {
             matrix = matrix.multiply(linalg.Mat4.scale(self.content_scale));
+            mouse[0] /= self.content_scale;
+            mouse[1] /= self.content_scale;
         }
 
         var quad_i: usize = self.quads.items.len;
@@ -240,8 +281,8 @@ pub const Viewport = struct {
                 var x = @intToFloat(f32, i / 2);
                 var y = @intToFloat(f32, i % 2);
 
-                var pos_x = quad.box[0] + quad.box[2] * x;
-                var pos_y = quad.box[1] + quad.box[3] * y;
+                var pos_x = self.quads_offset[0] + quad.box[0] + quad.box[2] * x;
+                var pos_y = self.quads_offset[1] + quad.box[1] + quad.box[3] * y;
 
                 var position_vec4 = linalg.Vec4.new(pos_x, pos_y, 0.0, 1.0);
                 position_vec4 = matrix.multiplyVector(position_vec4);
@@ -263,7 +304,7 @@ pub const Viewport = struct {
         }
 
         for (self.children.items) |*child| {
-            child.draw(matrix, size);
+            child.draw(matrix, size, mouse);
         }
 
         self.quads.deinit(util.allocator);
@@ -334,7 +375,7 @@ pub const Viewport = struct {
     pub fn pad(self: *Viewport, padding: [2]f32) *Viewport {
         for (padding) |el, i| {
             self.inner_offset[i] -= el;
-            self.offset[i] += el;
+            self.quads_offset[i] += el;
 
             self.inner_size[i] += el * 2.0;
             self.outer_size[i] += el * 2.0;
@@ -344,6 +385,10 @@ pub const Viewport = struct {
     }
 
     pub fn center(self: *Viewport, margin: [2]f32) *Viewport {
+        return self.fill(margin, .{ 0.5, 0.5 });
+    }
+
+    pub fn fill(self: *Viewport, margin: [2]f32, gravity: [2]f32) *Viewport {
         var i: usize = 0;
 
         while (i < 2) : (i += 1) {
@@ -351,13 +396,15 @@ pub const Viewport = struct {
                 const room = (size_hint - self.inner_size[i]);
                 const room_without_margin = room - margin[i] * 2.0;
 
-                self.offset[i] += room * 0.5;
-                self.inner_offset[i] -= room_without_margin * 0.5;
+                self.quads_offset[i] += margin[i];
+
+                self.quads_offset[i] += room_without_margin * gravity[0];
+                self.inner_offset[i] -= room_without_margin * gravity[0];
 
                 self.inner_size[i] += room_without_margin;
                 self.outer_size[i] += room;
             } else {
-                self.offset[i] += margin[i];
+                self.quads_offset[i] += margin[i];
                 self.outer_size[i] += margin[i] * 2;
             }
         }
@@ -380,7 +427,22 @@ pub const Viewport = struct {
 
         return self;
     }
+
+    pub fn sliderRect(self: *Viewport, start: f32, end: f32) *Viewport {
+        self.quads.append(util.allocator, Quad {
+            .shader = self.inter.flat_shader.*,
+            .texture = null,
+            .box = .{ self.inner_offset[0] + self.inner_size[0] * start, self.inner_offset[1], self.inner_size[0] * (end - start), self.inner_size[1] },
+            .uv_box = undefined,
+            .color = self.style.color,
+        }) catch return self;
+
+        return self;
+    }
 };
+
+hover: ?u32,
+hover_mouse: [2]f32,
 
 text_shader: *Shader,
 flat_shader: *Shader,
@@ -441,7 +503,8 @@ fn setTexture(self: *Self, texture_opt: ?Texture) void {
     }
 }
 
-pub fn flush(self: *Self, viewport: *Viewport) void {
+pub fn flush(self: *Self, viewport: *Viewport, mouse: [2]f32) void {
+    self.hover = null;
     self.current_shader = self.text_shader.*;
     self.current_shader.bindRaw();
 
@@ -452,7 +515,7 @@ pub fn flush(self: *Self, viewport: *Viewport) void {
     const size = .{ viewport.size_hint[0].?, viewport.size_hint[1].? };
     var matrix = linalg.Mat4.orthographic(0.0, size[0], 0.0, size[1], -1.0, 1.0);
 
-    viewport.draw(matrix, size);
+    viewport.draw(matrix, size, mouse);
 
     self.quad_list.flush();
 

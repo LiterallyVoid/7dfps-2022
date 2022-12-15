@@ -9,8 +9,8 @@ effect DEATH
 		size_end 8
 		size_curve 0.5
 
-		color_start 0.6 0.1 0.1 0.6
-		color_end 0.6 0.1 0.1 0.6
+		color_start 0.2 0.1 0.1 0.8
+		color_end 0.2 0.1 0.1 0.8
 
 		gravity 1
 
@@ -23,8 +23,8 @@ effect DEATH
 
 		lifetime 0.3 0.8
 
-		size_start 0.5 1
-		size_end 0.5 2.5
+		size_start 0.3 0.4
+		size_end 0.8 1
 
 		drag_start 1.0 1.0
 		drag_end 4.0 4.0
@@ -32,12 +32,12 @@ effect DEATH
 		velocity_intrinsic 0
 		velocity_random 12
 
-		color_start 1.0 0.1 0.1 0.8    0.7 0.1 0.1 0.8
-		color_end 1.0 0.1 0.1 0.8    0.7 0.1 0.1 0.8
+		color_start 0.3 0.1 0.1 0.8    0.7 0.1 0.1 0.8
+		color_end 0.3 0.1 0.1 0.8    0.7 0.1 0.1 0.8
 
 		fade 0.6
 
-		gravity 0.1
+		gravity 0.3
 		stretch 0.5
 
 effect shotgun-tracer
@@ -80,8 +80,8 @@ effect impact-flesh
 
 		lifetime 0.4 0.6
 
-		size_start 0.5 0.5
-		size_end 0.6 0.6
+		size_start 0
+		size_end 1
 
 		drag_start 2.0 2.0
 		drag_end 10.0 10.0
@@ -89,8 +89,8 @@ effect impact-flesh
 		velocity_intrinsic 3
 		velocity_random 3
 
-		color_start 0.7 0.1 0.1 0.8    0.3 0.1 0.1 0.8
-		color_end 0.7 0.1 0.1 0.8    0.3 0.1 0.1 0.8
+		color_start 1.0 0.1 0.1 0.8   1.0 0.1 0.1 0.8
+		color_end 0.6 0.1 0.1 0.8    0.3 0.1 0.1 0.8
 
 		fade 0.6 0.9
 

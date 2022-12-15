@@ -319,7 +319,7 @@ fn drawUIFn(self: *Entity, game: *Game, into: *Inter.Viewport) void {
     const ammo = std.fmt.bufPrint(&buf, "{}/5", .{ self.aux.player.shells_loaded }) catch "???";
     into.next().anchored(.{0.9, 0.9}, .{1.0, 1.0}).fontSize(100.0).text(ammo).pad(.{20.0, 10.0}).done();
 
-    into.next().anchored(.{0.0, 0.0}, .{0.0, 0.0}).fontSize(30.0).color(.{255, 48, 48, 255}).text("LIGHTING NEEDS TO BE REBUILT (5 unbuilt objects)").done();
+    into.next().anchored(.{0.0, 0.0}, .{0.0, 0.0}).fontSize(10.0).color(.{255, 48, 48, 255}).text("LIGHTING NEEDS TO BE REBUILT (5 unbuilt objects)").pad(.{ 10.0, 10.0 }).done();
 }
 
 pub fn spawn(self: *Entity, game: *Game) void {

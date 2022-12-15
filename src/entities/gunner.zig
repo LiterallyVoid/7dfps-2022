@@ -117,10 +117,10 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         }
 
         self.timers[TIMER_GUN_ROTATION_VELOCITY] -= 20.0;
-        self.timers[TIMER_GUN_ROTATION_VELOCITY] *= std.math.pow(f32, 0.5, ctx.delta * 2.0);
+        self.timers[TIMER_GUN_ROTATION_VELOCITY] *= std.math.pow(f32, 0.5, ctx.delta * 4.0);
         self.timers[TIMER_GUN_ROTATION_VELOCITY] += 20.0;
     } else if (self.state == .ground) {
-        self.timers[TIMER_GUN_ROTATION_VELOCITY] *= std.math.pow(f32, 0.5, ctx.delta * 0.6);
+        self.timers[TIMER_GUN_ROTATION_VELOCITY] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
 
         const target_angle = std.math.atan2(f32, delta_to_player.data[1], delta_to_player.data[0]) + std.math.pi * 0.5;
         interpolateAngleTo(&self.angle.data[2], target_angle, ctx.delta * 10.0);
