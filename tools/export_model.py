@@ -56,11 +56,14 @@ def bone_info(obj, name):
 
 	return all_bones[key]
 
-def vertex_to_index(position, normal, uv, bone_indices, bone_weights):
+def vertex_to_index(position, normal, tangent, bitangent, color, uv, bone_indices, bone_weights):
 	data = struct.pack(
-		"<3f3bx2f4B4B",
+		"<3f3b3b3b3B2f4B4B",
 		*position,
 		*(int(e * 127) for e in normal),
+		*(int(e * 127) for e in tangent),
+		*(int(e * 127) for e in bitangent),
+		*(int(e * 255) for e in color[0:3]),
 		*uv,
 		*bone_indices,
 		*(int(e * 255) for e in bone_weights),
@@ -79,17 +82,17 @@ def export_mesh(obj):
 	mesh_obj = obj.evaluated_get(depsgraph)
 	mesh = mesh_obj.to_mesh()
 
-	bm = bmesh.new()
-	bm.from_mesh(mesh)
-	bmesh.ops.triangulate(bm, faces=bm.faces, quad_method='FIXED', ngon_method='EAR_CLIP')
-	bm.to_mesh(mesh)
-	bm.free()
-
 	mesh.transform(obj.matrix_world)
 
 	mesh.calc_normals_split()
 
 	uvmap = mesh.uv_layers.active
+	try:
+		colormap = mesh.color_attributes[0]
+	except:
+		colormap = None
+
+	mesh.calc_tangents(uvmap = uvmap.name)
 
 	vertices = []
 
@@ -105,7 +108,10 @@ def export_mesh(obj):
 		except:
 			material = []
 			materials[mat_name] = material
-		for poly_vert_index in range(3):
+
+		indices = []
+
+		for poly_vert_index in range(len(poly.vertices)):
 			vert_index = poly.vertices[poly_vert_index]
 			loop_index = poly.loop_indices[poly_vert_index]
 
@@ -121,11 +127,25 @@ def export_mesh(obj):
 
 			all_bones = list(sorted(all_bones, key = lambda a: -a[1]))[0:4]
 
+			color = [1, 1, 1, 1]
+
+			if colormap is not None:
+				if colormap.domain == 'POINT':
+					color = colormap.data[vert_index].color
+				else:
+					color = colormap.data[loop_index].color
+
 			bone_indices = [g[0] for g in all_bones]
 			bone_weights = [g[1] for g in all_bones]
 
-			idx = vertex_to_index(vert.co, loop.normal, uvmap.data[loop_index].uv, bone_indices, bone_weights)
-			material.append(idx)
+			idx = vertex_to_index(vert.co, loop.normal, loop.tangent, loop.bitangent, color, uvmap.data[loop_index].uv, bone_indices, bone_weights)
+
+			if poly_vert_index >= 2:
+				material.append(indices[0])
+				material.append(indices[-1])
+				material.append(idx)
+
+			indices.append(idx)
 
 	mesh_obj.to_mesh_clear()
 
@@ -170,7 +190,9 @@ for frame in frames:
 assert bpy.data.filepath.endswith(".blend")
 f = open(bpy.data.filepath[0:-len(".blend")] + ".model", "wb")
 
-f.write(struct.pack("<IIIII", len(materials), len(all_bones), len(frames), sum(len(m) for m in materials.values()), len(vertices)))
+HIGH_BIT = 0x80000000
+
+f.write(struct.pack("<IIIII", len(materials) | HIGH_BIT, len(all_bones), len(frames), sum(len(m) for m in materials.values()), len(vertices)))
 
 indices = []
 

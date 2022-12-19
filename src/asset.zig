@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const util = @import("./util.zig");
+const Shader = @import("./Shader.zig");
 
 fn AssetWithHeader(comptime T: type) type {
     return struct {
@@ -108,5 +109,22 @@ pub const Manager = struct {
 
     pub fn deinit(self: *Manager) void {
         self.assets.deinit();
+    }
+
+    pub fn recompileShaders(self: *Manager) void {
+        var it = self.assets.iterator();
+        while (it.next()) |entry| {
+            if (!std.mem.startsWith(u8, entry.key_ptr.*, "Shader/")) {
+                continue;
+            }
+
+            const path = entry.key_ptr.*["Shader/".len..];
+
+            const header = entry.value_ptr.*;
+            const with_header = @fieldParentPtr(AssetWithHeader(Shader), "header", header);
+
+            with_header.data.deinit(self);
+            with_header.data = Shader.init(self, path) catch unreachable;
+        }
     }
 };

@@ -13,6 +13,8 @@ const Self = @This();
 pub const Vertex = struct {
     position: [3]f32,
     normal: [3]i8,
+    tangent: [3]i8,
+    bitangent: [3]i8,
     uv: [2]f32,
 
     bone_indices: [4]u8,
@@ -60,7 +62,13 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
 
     var reader = file.reader();
 
-    const materials_count = try reader.readIntLittle(u32);
+    var has_colors = false;
+
+    var materials_count = try reader.readIntLittle(u32);
+    if (materials_count >= 0x80000000) {
+        materials_count -= 0x80000000;
+        has_colors = true;
+    }
     const bones_count = try reader.readIntLittle(u32);
     const frames_count = try reader.readIntLittle(u32);
     const indices_count = try reader.readIntLittle(u32);
@@ -184,7 +192,19 @@ pub fn init(am: *asset.Manager, path: []const u8) !Self {
             norm_elem.* = try reader.readIntLittle(i8);
         }
 
-        _ = try reader.readIntLittle(u8);
+        for (vertex.tangent) |*elem| {
+            elem.* = try reader.readIntLittle(i8);
+        }
+
+        for (vertex.bitangent) |*elem| {
+            elem.* = try reader.readIntLittle(i8);
+        }
+
+        if (has_colors) {
+            _ = try reader.readIntLittle(u8);
+            _ = try reader.readIntLittle(u8);
+            _ = try reader.readIntLittle(u8);
+        }
 
         for (vertex.uv) |*uv_elem| {
             uv_elem.* = @bitCast(f32, try reader.readIntLittle(u32));

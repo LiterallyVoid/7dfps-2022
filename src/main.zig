@@ -17,6 +17,14 @@ pub fn main() !void {
     if (c.glfwInit() == 0) return error.GLFWInitFailed;
     defer c.glfwTerminate();
 
+    var device = c.alcOpenDevice(null);
+    defer _ = c.alcCloseDevice(device);
+
+    var ctx = c.alcCreateContext(device, null);
+    defer c.alcDestroyContext(ctx);
+
+    _ = c.alcMakeContextCurrent(ctx);
+
     var app: App = undefined;
     try app.init();
     defer app.deinit();

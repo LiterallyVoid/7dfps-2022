@@ -3,3 +3,8 @@ zig-out
 *.trace
 *.blend1
 *.blend2
+deps/glfw
+controls.bin
+deps/lib*
+deps/openal*
+settings.bin

@@ -1,3 +1,5 @@
+# -*- tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4 -*-
+
 import bmesh, struct, bpy
 
 depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -6,8 +8,8 @@ vertices = []
 vertex_indices = {}
 materials = {}
 
-def vertex_to_index(position, normal, uv):
-	data = struct.pack("<3f3bx2f", *position, *(int(e * 127) for e in normal), *uv)
+def vertex_to_index(position, normal, tangent, bitangent, uv):
+	data = struct.pack("<3f3b3b3b2f", *position, *(int(e * 127) for e in normal), *(int(e * 127) for e in tangent), *(int(e * 127) for e in bitangent), *uv)
 	if data in vertex_indices:
 		return vertex_indices[data]
 
@@ -34,6 +36,8 @@ def export_mesh(obj):
 
 	uvmap = mesh.uv_layers.active
 
+	mesh.calc_tangents(uvmap = uvmap.name)
+
 	vertices = []
 
 	for poly in mesh.polygons:
@@ -50,7 +54,7 @@ def export_mesh(obj):
 			vert = mesh.vertices[vert_index]
 			loop = mesh.loops[loop_index]
 
-			idx = vertex_to_index(vert.co, loop.normal, uvmap.data[loop_index].uv)
+			idx = vertex_to_index(vert.co, loop.normal, loop.tangent, loop.bitangent, uvmap.data[loop_index].uv)
 			material.append(idx)
 
 	mesh_obj.to_mesh_clear()
@@ -62,7 +66,20 @@ for object in depsgraph.objects:
 assert bpy.data.filepath.endswith(".blend")
 f = open(bpy.data.filepath[0:-len(".blend")] + ".map", "wb")
 
-f.write(struct.pack("<III", len(materials), sum(len(m) for m in materials.values()), len(vertices)))
+entities = []
+
+for obj in depsgraph.objects:
+        if obj.type == 'EMPTY':
+                kind = 0
+                if 'gunner' in obj.name:
+                        kind = 1
+                if 'coin' in obj.name:
+                        kind = 2
+                if 'player' in obj.name:
+                        kind = 3
+                entities.append(struct.pack("<Iffff", kind, *obj.location, obj.rotation_euler.z))
+
+f.write(struct.pack("<IIII", len(materials), len(entities), sum(len(m) for m in materials.values()), len(vertices)))
 
 indices = []
 
@@ -79,5 +96,7 @@ for index in indices:
 	f.write(struct.pack("<I", index))
 
 f.write(b"".join(vertices))
+
+f.write(b"".join(entities))
 
 f.close()

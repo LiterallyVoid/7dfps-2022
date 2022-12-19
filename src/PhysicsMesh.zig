@@ -137,7 +137,7 @@ fn brushTraceLine(planes: [][4]f32, point: linalg.Vec3, half_extents: linalg.Vec
     };
 }
 
-const BLOCKSIZE: f32 = 4.0;
+const BLOCKSIZE: f32 = 16.0;
 
 blocks: []Block,
 blocks_size: [3]usize,

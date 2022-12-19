@@ -1,5 +1,4 @@
 const std = @import("std");
-
 const asset = @import("./asset.zig");
 const c = @import("./c.zig");
 const util = @import("./util.zig");
@@ -12,7 +11,7 @@ const GlyphBox = struct {
     uv_box: [4]f32,
 };
 
-const SDF_SCALE = 64.0;
+const SDF_SCALE = 32.0;
 const ATLAS_SIZE = 1024;
 const FONT_ASCENT_FUDGE = 0.8;
 

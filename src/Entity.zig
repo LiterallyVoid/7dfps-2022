@@ -10,7 +10,7 @@ const Inter = @import("./Inter.zig");
 
 const Self = @This();
 
-pub const MARGIN = 0.0001;
+pub const MARGIN = 0.01;
 
 pub const TickContext = struct {
     game: *Game,
@@ -36,6 +36,7 @@ pub fn createIgnore(self: *Self) PhysicsMesh.Ignore {
 
 pub fn traceVertical(self: *Self, ctx: *const TickContext, offset: f32) ?f32 {
     if (ctx.game.traceLine(self.origin, self.half_extents.sub(linalg.Vec3.broadcast(MARGIN)), linalg.Vec3.new(0.0, 0.0, offset), self.createIgnore())) |impact| {
+        if (impact.plane.data[2] > 0.7) self.on_ground = true;
         return impact.time * offset + MARGIN * 2.0 * if (offset < 0.0) @as(f32, -1.0) else 1.0;
     }
 
@@ -51,6 +52,7 @@ pub fn move(self: *Self, ctx: *const TickContext) void {
         const into = self.velocity.dot(impact.plane.xyz());
 
         if (into < 0.0) {
+            if (impact.plane.data[2] > 0.7) self.on_ground = true;
             self.velocity = self.velocity.sub(impact.plane.xyz().mulScalar(into));
         }
     }
@@ -85,7 +87,6 @@ pub fn walkMove(self: *Self, ctx: *const TickContext, step_height: f32) void {
 
     if (self.traceVertical(ctx, -step_height - up_movement)) |down_movement| {
         self.origin.data[2] += down_movement;
-        self.on_ground = true;
     } else {
         self.origin.data[2] -= up_movement;
         self.on_ground = false;
@@ -144,6 +145,15 @@ pub fn processEnemyLOS(self: *Self, ctx: *const TickContext) void {
     if (self.has_los) {
         self.target_position = ctx.game.player.origin;
     }
+
+    if (delta_to_player.smallerThan(20.0)) {
+        if (self.has_los) {
+            self.awake = true;
+        }
+    }
+    if (!delta_to_player.smallerThan(35.0)) {
+        self.awake = false;
+    }
 }
 
 pub const Team = enum {
@@ -164,6 +174,7 @@ pub fn damage(self: *Self, ctx: *const TickContext, dmg: f32, source: *Self) voi
             self.origin,
             linalg.Vec3.zero(),
         ) catch unreachable;
+        ctx.game.app.playSound(ctx.game.sound_murder, .{ .entity = self });
     }
 
     self.velocity = self.velocity.add(source.origin.sub(self.origin).normalized().mulScalar(-dmg));
@@ -189,6 +200,8 @@ aux: union(enum) {
         last_input: Game.Input = .{},
         roll: f32 = 0.0,
         shells_loaded: u32 = 5,
+        damage_flourish: f32 = 0.0,
+        last_health: f32 = 100.0,
     },
 } = undefined,
 
@@ -206,6 +219,10 @@ model_offset: linalg.Vec3 = linalg.Vec3.zero(),
 angle: linalg.Vec3 = linalg.Vec3.zero(),
 
 velocity: linalg.Vec3 = linalg.Vec3.zero(),
+velocity_smooth: linalg.Vec3 = linalg.Vec3.zero(),
+
+// only for players
+forward: linalg.Vec3 = linalg.Vec3.zero(),
 
 on_ground: bool = false,
 
@@ -228,3 +245,5 @@ los_timer: f32 = 0.0,
 victory: bool = false,
 
 team: Team = .neutral,
+
+awake: bool = false,

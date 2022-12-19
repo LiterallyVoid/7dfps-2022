@@ -29,12 +29,14 @@ fn attack(self: *Entity, ctx: *const Entity.TickContext) void {
     const impact = ctx.game.nudge(attack_origin, attack_half_extents, ignore) orelse return;
 
     if (impact.entity) |ent| {
-        ent.damage(ctx, 50.0, self);
+        ent.damage(ctx, 30.0, self);
     }
 }
 
 fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
     self.processEnemyLOS(ctx);
+
+    if (!self.awake) return;
 
     const delta_to_player = self.target_position.sub(self.origin);
 
@@ -85,7 +87,7 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
 
         self.velocity = self.matrix().multiplyVector(linalg.Vec4.new(0.0, -forward_speed, 0.0, 0.0)).xyz();
 
-        self.walkMove(ctx, 0.2);
+        self.walkMove(ctx, 1.0);
 
         if (!self.on_ground) {
             self.state = .air;

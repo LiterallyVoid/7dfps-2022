@@ -333,6 +333,21 @@ pub const Viewport = struct {
         return self;
     }
 
+    pub fn image(self: *Viewport, texture: Texture, size: [2]f32) *Viewport {
+        self.quads.append(util.allocator, Quad {
+            .shader = self.inter.texture_shader.*,
+            .texture = texture,
+            .box = .{ 0.0, 0.0, size[0], size[1] },
+            .uv_box = .{ 0.0, 0.0, 1.0, 1.0 },
+            .color = self.style.color,
+        }) catch return self;
+
+        self.inner_size = size;
+        self.outer_size = size;
+
+        return self;
+    }
+
     pub fn text(self: *Viewport, txt: []const u8) *Viewport {
         var width: f32 = 0.0;
         var height: f32 = 0.0;
@@ -446,6 +461,7 @@ hover_mouse: [2]f32,
 
 text_shader: *Shader,
 flat_shader: *Shader,
+texture_shader: *Shader,
 default_font: *Font,
 
 quad_list: QuadList,
@@ -454,6 +470,7 @@ current_shader: Shader,
 pub fn init(self: *Self, am: *asset.Manager) !void {
     self.text_shader = try am.load(Shader, "shaders/text");
     self.flat_shader = try am.load(Shader, "shaders/ui-flat");
+    self.texture_shader = try am.load(Shader, "shaders/ui-texture");
     self.default_font = try am.load(Font, "fonts/font.ttf");
 
     self.quad_list = QuadList.init();
@@ -461,7 +478,9 @@ pub fn init(self: *Self, am: *asset.Manager) !void {
 }
 
 pub fn deinit(self: *Self, am: *asset.Manager) void {
+    am.drop(self.flat_shader);
     am.drop(self.text_shader);
+    am.drop(self.texture_shader);
     am.drop(self.default_font);
 
     self.quad_list.deinit();

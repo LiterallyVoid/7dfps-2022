@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const linalg = @import("../linalg.zig");
+const util = @import("../util.zig");
 const Game = @import("../Game.zig");
 const RenderContext = @import("../RenderContext.zig");
 const Entity = @import("../Entity.zig");
@@ -40,6 +41,7 @@ fn interpolateAngleTo(to: *f32, from: f32, factor: f32) void {
     const angle_diff = @mod(from - to.* + std.math.pi, std.math.pi * 2) - std.math.pi;
 
     to.* += angle_diff * (1.0 - std.math.pow(f32, 0.5, factor));
+    to.* = util.angleWrap(to.*);
 }
 
 fn shoot(self: *Entity, ctx: *const Entity.TickContext) void {
@@ -61,7 +63,7 @@ fn shoot(self: *Entity, ctx: *const Entity.TickContext) void {
     const impact = ctx.game.traceLine(origin, linalg.Vec3.zero(), dir, self.createIgnore()) orelse return;
 
     if (impact.entity) |entity| {
-        entity.damage(ctx, 13.0, self);
+        entity.damage(ctx, 9.0, self);
     }
 
     ctx.game.particles.effectOne(
@@ -69,10 +71,14 @@ fn shoot(self: *Entity, ctx: *const Entity.TickContext) void {
         origin,
         dir.mulScalar(impact.time),
     ) catch unreachable;
+
+    ctx.game.app.playSound(ctx.game.sound_chaingun_shoot, .{ .entity = self });
 }
 
 fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
     self.processEnemyLOS(ctx);
+
+    if (!self.awake) return;
 
     const delta_to_player = self.target_position.sub(self.origin);
 
@@ -83,6 +89,7 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         self.timers[TIMER_WALK_WEIGHT] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
 
         self.timers[TIMER_ATTACK_LIMIT] -= ctx.delta;
+
         if (self.timers[TIMER_ATTACK_LIMIT] < 0.0) {
             self.view_angle[0] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
             self.view_angle[1] *= std.math.pow(f32, 0.5, ctx.delta * 10.0);
@@ -92,6 +99,8 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
             }
 
             return;
+        } else if (!self.has_los) {
+            self.timers[TIMER_ATTACK_LIMIT] = 0.0;
         }
 
         self.velocity = linalg.Vec3.zero();
@@ -140,9 +149,9 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
         }
 
         if (self.timers[TIMER_ATTACK] < 0.0 and self.has_los) {
-            self.timers[TIMER_ATTACK] = ctx.game.rand.float(f32) * 2.0 + 1.0;
+            self.timers[TIMER_ATTACK] = ctx.game.rand.float(f32) * 0.5 + 0.5;
             self.timers[TIMER_ATTACK_LIMIT] = 3.0;
-            self.timers[TIMER_ATTACK_REFIRE] = 1.0;
+            self.timers[TIMER_ATTACK_REFIRE] = 0.6;
             self.state = .attack;
         }
 
@@ -150,7 +159,7 @@ fn tickFn(self: *Entity, ctx: *const Entity.TickContext) void {
 
         self.velocity = self.matrix().multiplyVector(linalg.Vec4.new(0.0, -forward_speed, 0.0, 0.0)).xyz();
 
-        self.walkMove(ctx, 0.2);
+        self.walkMove(ctx, 1.0);
 
         if (!self.on_ground) {
             self.state = .air;
@@ -211,7 +220,8 @@ fn drawFn(self: *Entity, game: *Game, ctx: *RenderContext) void {
 }
 
 pub fn spawn(self: *Entity, game: *Game) void {
-    self.timers[TIMER_ATTACK] = 3.0;
+    self.timers[TIMER_ATTACK] = 0.3;
+    self.timers[TIMER_ATTACK_LIMIT] = 3.0;
 
     self.team = .enemy;
 

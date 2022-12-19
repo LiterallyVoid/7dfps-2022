@@ -11,6 +11,11 @@ const Self = @This();
 
 const c = @import("./c.zig");
 
+pub const OPTIONS = struct {
+    pub var ambient_occlusion_quality: u32 = 0;
+    pub var shadow_quality: u32 = 0;
+};
+
 gl_program: c.GLuint,
 
 const FileAndLineno = struct {
@@ -151,6 +156,8 @@ pub fn compileStage(am: *asset.Manager, base_path: []const u8, stage: c.GLenum) 
     defer code.deinit();
 
     try code.writer().writeAll("#version 330 core\n");
+    try code.writer().print("#define AO_QUALITY {}\n", .{ OPTIONS.ambient_occlusion_quality });
+    try code.writer().print("#define SHADOW_QUALITY {}\n", .{ OPTIONS.shadow_quality });
     try parseIncludes(am, &files, &lines, path, code.writer());
 
     var shader = c.glCreateShader(stage);
@@ -218,7 +225,20 @@ pub fn bind(self: Self, ctx: *RenderContext) void {
     c.glUseProgram(self.gl_program);
 
     self.uniformMatrix("u_world_to_camera", ctx.matrix_world_to_camera);
+    self.uniformMatrix("u_camera_to_world", ctx.matrix_camera_to_world);
     self.uniformMatrix("u_projection", ctx.matrix_projection);
+
+    if (OPTIONS.shadow_quality > 0) {
+        self.uniformMatrix("u_shadow", ctx.matrix_shadow);
+        self.uniformTexture("u_shadowmap", 4, ctx.texture_shadow);
+    }
+}
+
+pub fn uniformFloat(self: Self, comptime name: [:0]const u8, value: f32) void {
+    const location = c.glGetUniformLocation(self.gl_program, name.ptr);
+    if (location < 0) return;
+
+    c.glUniform1f(location, value);
 }
 
 pub fn uniformMatrix(self: Self, comptime name: [:0]const u8, matrix: linalg.Mat4) void {

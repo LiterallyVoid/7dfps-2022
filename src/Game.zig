@@ -5,15 +5,18 @@ const c = @import("./c.zig");
 const linalg = @import("./linalg.zig");
 const util = @import("./util.zig");
 
+const App = @import("./App.zig");
 const Map = @import("./Map.zig");
 const Entity = @import("./Entity.zig");
 const RenderContext = @import("./RenderContext.zig");
 
 const PhysicsMesh = @import("./PhysicsMesh.zig");
 const Model = @import("./Model.zig");
+const Texture = @import("./Texture.zig");
 
 const Inter = @import("./Inter.zig");
 const ParticleMonster = @import("./ParticleMonster.zig");
+const Sound = @import("./Sound.zig");
 
 const ent_player = @import("./entities/player.zig");
 const ent_slasher = @import("./entities/slasher.zig");
@@ -28,6 +31,7 @@ pub const Input = struct {
         jump,
         attack,
         reload,
+        quick_melee,
     };
 
     angle: [2]f32 = .{ 0.0, 0.0 }, // pitch, yaw
@@ -46,6 +50,8 @@ pub const Input = struct {
     }
 };
 
+app: *App,
+
 asset_manager: *asset.Manager,
 map: *Map,
 entities: [MAXENTITIES]Entity,
@@ -58,8 +64,19 @@ particles: ParticleMonster,
 
 dbg_gizmo: *Model,
 
-pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
+crosshair_tex: *Texture,
+sound_shoot: *Sound,
+sound_chaingun_shoot: *Sound,
+sound_shotgun_mech: *Sound,
+sound_hit: *Sound,
+sound_murder: *Sound,
+sound_melee_hit: *Sound,
+
+victory_time: f32 = 0.0,
+
+pub fn init(self: *Self, app: *App, am: *asset.Manager, map: []const u8) !void {
     self.* = .{
+        .app = app,
         .asset_manager = am,
         .map = try am.load(Map, map),
         .entities = [1]Entity{.{}} ** MAXENTITIES,
@@ -71,27 +88,41 @@ pub fn init(self: *Self, am: *asset.Manager, map: []const u8) !void {
         .particles = undefined,
 
         .dbg_gizmo = try am.load(Model, "dev/gizmo.model"),
+        .crosshair_tex = try am.load(Texture, "special/crosshair/crosshair.png"),
+        .sound_shoot = try am.load(Sound, "sounds/shotgun-fire.ogg"),
+        .sound_chaingun_shoot = try am.load(Sound, "sounds/chaingun-fire.ogg"),
+        .sound_shotgun_mech = try am.load(Sound, "sounds/shotgun-mech.ogg"),
+        .sound_hit = try am.load(Sound, "sounds/hit.ogg"),
+        .sound_murder = try am.load(Sound, "sounds/murder.ogg"),
+        .sound_melee_hit = try am.load(Sound, "sounds/melee-hit.ogg"),
     };
 
     try self.particles.init(am);
 
     self.rand = self.prng.random();
 
-    self.player = self.spawn().?;
-    ent_player.spawn(self.player, self);
-    self.player.origin = linalg.Vec3.new(-10.0, -15.0, -3.0);
+    self.player = undefined;
 
-    var i: usize = 0;
-    while (i < 20) : (i += 1) {
-        const gunner = self.spawn().?;
+    for (self.map.entities) |entity| {
+        const ent = self.spawn().?;
 
-        if (self.rand.float(f32) < 0.5) {
-            ent_gunner.spawn(gunner, self);
-        } else {
-            ent_slasher.spawn(gunner, self);
+        switch (entity.kind) {
+            .slasher => ent_slasher.spawn(ent, self),
+            .gunner => ent_gunner.spawn(ent, self),
+            .coin => ent_gunner.spawn(ent, self),
+            .player => {
+                ent_player.spawn(ent, self);
+                self.player = ent;
+            },
         }
 
-        gunner.origin.data[1] = @intToFloat(f32, i) * -0.3;
+        ent.origin = entity.position;
+        ent.angle.data[2] = entity.angle + std.math.pi;
+        ent.origin.data[2] += ent.half_extents.data[2];
+
+        if (ent.traceVertical(&Entity.TickContext {.game = self, .delta = 0}, -3.0)) |offset| {
+            ent.origin.data[2] += offset;
+        }
     }
 }
 
@@ -107,6 +138,13 @@ pub fn deinit(self: *Self) void {
 
     self.asset_manager.drop(self.map);
     self.asset_manager.drop(self.dbg_gizmo);
+    self.asset_manager.drop(self.crosshair_tex);
+    self.asset_manager.drop(self.sound_shoot);
+    self.asset_manager.drop(self.sound_chaingun_shoot);
+    self.asset_manager.drop(self.sound_shotgun_mech);
+    self.asset_manager.drop(self.sound_hit);
+    self.asset_manager.drop(self.sound_murder);
+    self.asset_manager.drop(self.sound_melee_hit);
 }
 
 pub fn spawn(self: *Self) ?*Entity {
@@ -134,6 +172,8 @@ pub fn update(self: *Self, delta: f32) void {
         .delta = std.math.min(delta, 1.0 / 15.0),
     };
 
+    var enemies_alive = false;
+
     for (self.entities) |*entity| {
         if (!entity.alive) {
             for (entity.models) |*model_opt| {
@@ -147,8 +187,37 @@ pub fn update(self: *Self, delta: f32) void {
             continue;
         }
 
+        if (entity.team == .enemy) enemies_alive = true;
+
         entity.tick(entity, &ctx);
     }
+
+    if (enemies_alive) self.victory_time += delta;
+}
+
+fn mainDraw(self: *Self, ctx: *RenderContext) void {
+    self.map.draw(ctx);
+
+    for (self.entities) |*entity| {
+        if (!entity.alive) continue;
+        if (entity == self.player) continue;
+
+        entity.draw(entity, self, ctx);
+    }
+}
+
+pub fn drawShadow(self: *Self, ctx: *RenderContext) void {
+    ctx.matrix_world_to_camera = linalg.Mat4.identity();
+    ctx.matrix_camera_to_world = linalg.Mat4.identity();
+
+    ctx.matrix_projection = linalg.Mat4.orthographic(-100.0, 100.0, -100.0, 100.0, -100.0, 100.0);
+    const SUN_DIR = linalg.Vec3.new(0.15, 0.4, 1.0).normalized();
+
+    ctx.matrix_projection = ctx.matrix_projection.multiply(linalg.Mat4.lookAt(SUN_DIR, linalg.Vec3.new(0.0, 0.0, 0.0), linalg.Vec3.new(0.0, 0.0, 1.0)));
+
+    ctx.matrix_shadow = ctx.matrix_projection;
+
+    mainDraw(self, ctx);
 }
 
 pub fn draw(self: *Self, ctx: *RenderContext) void {
@@ -157,26 +226,18 @@ pub fn draw(self: *Self, ctx: *RenderContext) void {
     c.glDepthRange(0.0, 1.0);
 
     self.player.camera(self.player, self, ctx);
-
-    var child_ctx = ctx.*;
-
-    self.map.draw(&child_ctx);
-
-    for (self.entities) |*entity| {
-        if (!entity.alive) continue;
-        if (entity == self.player) continue;
-
-        entity.draw(entity, self, ctx);
-    }
+    mainDraw(self, ctx);
 
     if (self.player.alive) self.player.draw(self.player, self, ctx);
+}
 
+pub fn drawTransparent(self: *Self, ctx: *RenderContext) void {
     c.glEnable(c.GL_BLEND);
     c.glBlendFunc(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
     c.glDepthMask(c.GL_FALSE);
-    self.map.drawTransparent(&child_ctx);
+    self.map.drawTransparent(ctx);
 
-    self.particles.draw(&child_ctx);
+    self.particles.draw(ctx);
 
     for (self.entities) |*entity| {
         if (!entity.alive) continue;
