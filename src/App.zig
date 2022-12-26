@@ -566,7 +566,7 @@ fn tick(self: *Self) void {
     self.game.input(self.game_input);
 
     if (!self.menu.visible) {
-        self.game.update(delta * 0.4);
+        self.game.update(delta);
     }
 
     if (Shader.OPTIONS.shadow_quality > 0) {
