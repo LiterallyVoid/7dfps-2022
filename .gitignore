@@ -8,3 +8,4 @@ controls.bin
 deps/lib*
 deps/openal*
 settings.bin
+release-win

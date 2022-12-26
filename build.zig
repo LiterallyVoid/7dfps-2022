@@ -66,10 +66,12 @@ pub fn build(b: *std.build.Builder) void {
 
     if (target.os_tag != null and target.os_tag.? == .windows) {
         exe.addLibraryPath("deps/glfw/glfw-3.3.8.bin.WIN64/lib-mingw-w64");
+        exe.addLibraryPath("deps/openal-win/openal-soft-1.22.2-bin/libs/Win64");
         exe.linkSystemLibraryName("glfw3dll");
         exe.linkSystemLibrary("gdi32");
         exe.linkSystemLibrary("user32");
         exe.linkSystemLibrary("opengl32");
+        exe.linkSystemLibrary("OpenAL32");
     } else {
         exe.addLibraryPath("deps/openal-soft-1.22.2/build/");
         exe.linkSystemLibrary("glfw");
@@ -79,6 +81,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.addIncludePath("deps/openal-soft-1.22.2/include/");
 
     exe.disable_sanitize_c = true;
+    exe.rdynamic = true;
 
     exe.install();
 

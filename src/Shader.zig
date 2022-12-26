@@ -13,7 +13,7 @@ const c = @import("./c.zig");
 
 pub const OPTIONS = struct {
     pub var ambient_occlusion_quality: u32 = 0;
-    pub var shadow_quality: u32 = 0;
+    pub var shadow_quality: u32 = 2;
 };
 
 gl_program: c.GLuint,

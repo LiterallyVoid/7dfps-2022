@@ -269,7 +269,7 @@ pub fn init(self: *Self) !void {
     self.sensitivity = 1.0;
     self.last_mouse_position = .{ 0.0, 0.0 };
 
-    self.window = c.glfwCreateWindow(640, 480, "7dfps 2022", null, null) orelse return error.GLFWWindowFailed;
+    self.window = c.glfwCreateWindow(640, 480, "8.06DFPS", null, null) orelse return error.GLFWWindowFailed;
     errdefer c.glfwDestroyWindow(self.window);
 
     c.glfwMakeContextCurrent(self.window);
@@ -450,7 +450,7 @@ fn bindingSet(self: *Self, button: Button, held: bool) void {
 }
 
 fn cursorCallback(window: ?*c.GLFWwindow, x: f64, y: f64) callconv(.C) void {
-    const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
+    const self = @ptrCast(*Self, @alignCast(@alignOf(Self), c.glfwGetWindowUserPointer(window.?).?));
 
     const dx = x - self.last_mouse_position[0];
     const dy = y - self.last_mouse_position[1];
@@ -467,7 +467,7 @@ fn cursorCallback(window: ?*c.GLFWwindow, x: f64, y: f64) callconv(.C) void {
 }
 
 fn mouseButtonCallback(window: ?*c.GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {
-    const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
+    const self = @ptrCast(*Self, @alignCast(@alignOf(Self), c.glfwGetWindowUserPointer(window.?).?));
 
     _ = mods;
 
@@ -487,7 +487,7 @@ fn mouseButtonCallback(window: ?*c.GLFWwindow, button: c_int, action: c_int, mod
 }
 
 fn keyCallback(window: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
-    const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
+    const self = @ptrCast(*Self, @alignCast(@alignOf(Self), c.glfwGetWindowUserPointer(window.?).?));
 
     _ = scancode;
     _ = mods;
@@ -510,7 +510,7 @@ fn keyCallback(window: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_in
 }
 
 fn focusCallback(window: ?*c.GLFWwindow, focused: c_int) callconv(.C) void {
-    const self = @ptrCast(*Self, @alignCast(@alignOf(*Self), c.glfwGetWindowUserPointer(window.?).?));
+    const self = @ptrCast(*Self, @alignCast(@alignOf(Self), c.glfwGetWindowUserPointer(window.?).?));
 
     if (focused != c.GLFW_TRUE) {
         self.menu.visible = true;
@@ -566,7 +566,7 @@ fn tick(self: *Self) void {
     self.game.input(self.game_input);
 
     if (!self.menu.visible) {
-        self.game.update(delta);
+        self.game.update(delta * 0.4);
     }
 
     if (Shader.OPTIONS.shadow_quality > 0) {

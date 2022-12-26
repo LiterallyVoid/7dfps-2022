@@ -209,6 +209,8 @@ pub fn credits(self: *Self, into: *Inter.Viewport) void {
     menu.next().pad(.{ 0.0, 10.0 }).done();
     menu.next().fontSize(15.0).text("Sounds from SONNISS GDC Audio packs").pad(.{ 0.0, 5.0 }).center(.{ 0.0, 0.0 }).done();
     menu.next().fontSize(10.0).text("https://sonniss.com/gameaudiogdc").pad(.{ 0.0, 5.0 }).center(.{ 0.0, 0.0 }).done();
+    menu.next().pad(.{ 0.0, 10.0 }).done();
+    menu.next().fontSize(5.0).text("The font is Overpass.").pad(.{ 0.0, 5.0 }).center(.{ 0.0, 0.0 }).done();
 }
 
 pub fn controls(self: *Self, into: *Inter.Viewport) void {
@@ -363,7 +365,7 @@ pub fn drawUI(self: *Self, into: *Inter.Viewport) void {
         defer menu.done();
 
         menu.rows(.{ .justify = 0.5 });
-        menu.next().fontSize(90.0).text("OOPS").pad(.{10.0, 30.0}).center(.{ 0.0, 0.0 }).done();
+        menu.next().fontSize(90.0).text("8.06DFPS").pad(.{10.0, 30.0}).center(.{ 0.0, 0.0 }).done();
 
         if (!self.app.has_started_game) {
             const play_btn = self.button(menu.next());

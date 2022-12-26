@@ -11,6 +11,9 @@ comptime {
     _ = @import("./PhysicsMesh.zig");
 }
 
+pub export var NvOptimusEnablement: c_int = 1;
+pub export var AmdPowerXpressRequestHighPerformance: c_int = 1;
+
 pub fn main() !void {
     defer _ = util.gpa.deinit();
 
